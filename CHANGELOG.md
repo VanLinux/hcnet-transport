@@ -10,6 +10,8 @@ Todos los cambios relevantes de HCNet Transport se documentan en este archivo.
 - Portada e identificación del analista dentro del reporte.
 - Resultados generales, tabla comparativa, memoria por grupo y diagnóstico en el `.tex`.
 - Pantalla inicial de presentación con alcance, licencia, plataforma y desarrollador.
+- Manual de usuario profesional en LaTeX y PDF, tamaño carta, con capturas, índices,
+  referencia matemática, caso demostrativo y solución de problemas en Linux.
 
 ### Cambiado
 

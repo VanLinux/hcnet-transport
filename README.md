@@ -40,6 +40,24 @@ La versión 2.0 incorpora una interfaz de contraste neutral, una pantalla inicia
 la identidad y alcance del software, y un reporte LaTeX completo con portada,
 identificación del analista, parámetros, resultados y memoria matemática.
 
+## Manual de usuario
+
+El manual oficial para HCNet Transport 2.0 está disponible en tamaño carta e incluye
+instalación en Linux, operación completa, capturas de la interfaz, fundamento
+metodológico, validaciones, caso demostrativo, referencia rápida e índice alfabético:
+
+- [Manual de usuario en PDF](docs/manual/HCNet_Transport_Manual_Usuario.pdf)
+- [Código fuente del manual en LaTeX](docs/manual/HCNet_Transport_Manual_Usuario.tex)
+
+Para recompilarlo desde `docs/manual`:
+
+```bash
+pdflatex HCNet_Transport_Manual_Usuario.tex
+makeindex HCNet_Transport_Manual_Usuario.idx
+pdflatex HCNet_Transport_Manual_Usuario.tex
+pdflatex HCNet_Transport_Manual_Usuario.tex
+```
+
 ## Instalación en Linux
 
 HCNet 2.0 requiere Python 3.11 o posterior. Por ahora, Linux es la única plataforma
