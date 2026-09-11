@@ -1,8 +1,8 @@
-# Metodología de HCNet Transport 1.0
+# Metodología de HCNet Transport 2.0
 
 ## 1. Propósito y alcance
 
-El motor 1.0 representa una intersección semaforizada aislada mediante grupos de
+El motor representa una intersección semaforizada aislada mediante grupos de
 carriles. Su propósito es hacer visible el proceso que conecta los datos observados con
 la capacidad, el grado de saturación, la demora de control y el nivel de servicio.
 
@@ -96,7 +96,7 @@ dato extremo en metodológicamente válido; las advertencias deben revisarse.
 - `fa`: tipo de área.
 - `fturn`: efecto conjunto del giro aplicable al grupo.
 
-La versión 1.0 no deduce esos factores a partir de flujos opuestos, peatones, radios de
+La versión 2.0 no deduce esos factores a partir de flujos opuestos, peatones, radios de
 giro o asignación de carriles. El usuario debe obtenerlos de una fuente autorizada y
 registrar el supuesto en las notas del grupo.
 
@@ -140,7 +140,7 @@ d₂ = 900T[(X-1) + √((X-1)² + 8kIX/(cT))]
 filtrado o medición aguas arriba. Los valores iniciales `PF=1`, `k=0.5` e `I=1`
 representan un caso aislado básico; no son valores universales.
 
-`d₃` representa demora por cola inicial. HCNet 1.0 no estima internamente esa cola: el
+`d₃` representa demora por cola inicial. HCNet 2.0 no estima internamente esa cola: el
 usuario introduce directamente su contribución en segundos por vehículo. El valor se
 marca en la memoria para evitar confundirlo con un resultado del programa.
 
@@ -170,7 +170,22 @@ qrojo = v(C-g)/3600
 Es el número esperado de llegadas durante el rojo bajo demanda uniforme. No incorpora
 dispersión de pelotones y no constituye una estimación formal de longitud máxima de cola.
 
-## 9. Validación requerida
+## 9. Trazabilidad y reporte LaTeX
+
+La vista **Reporte técnico** conserva la sustitución numérica de cada grupo de
+carriles. La exportación `.tex` amplía esa trazabilidad e incluye:
+
+1. identificación del proyecto y nombre del analista;
+2. parámetros generales;
+3. resumen operacional de la intersección;
+4. tabla comparativa de grupos de carriles;
+5. entradas, factores, ecuaciones y resultados por grupo;
+6. advertencias automáticas y alcance metodológico.
+
+Los textos capturados por el usuario se escapan antes de incorporarse al código LaTeX
+para conservar caracteres reservados como `&`, `%`, `_`, `#` y llaves.
+
+## 10. Validación requerida
 
 Para declarar un módulo apto para uso profesional deben compararse, como mínimo:
 
@@ -187,7 +202,7 @@ La comparación debe utilizar casos resueltos de una copia legítima del HCM 7, 
 erratas vigentes y una versión identificada de HCS. Las diferencias por redondeo deben
 documentarse; no deben ocultarse ajustando constantes sin fundamento.
 
-## 10. Referencias
+## 11. Referencias
 
 - Transportation Research Board. (2022). *Highway Capacity Manual, Seventh Edition:
   A Guide for Multimodal Mobility Analysis*. National Academies of Sciences,

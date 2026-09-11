@@ -7,6 +7,8 @@ from datetime import date
 from typing import Any
 from uuid import uuid4
 
+from hcnet import __version__
+
 SCHEMA_VERSION = 1
 
 
@@ -68,7 +70,7 @@ class IntersectionProject:
         return {
             "schema_version": SCHEMA_VERSION,
             "application": "HCNet Transport",
-            "application_version": "1.0.0",
+            "application_version": __version__,
             "project": asdict(self),
         }
 

@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "Si utilizas HCNet Transport en docencia o investigación, cita este software."
 title: "HCNet Transport"
 type: software
-version: 1.0.0
+version: 2.0.0
 date-released: 2026-09-11
 authors:
   - family-names: "Benítez García"

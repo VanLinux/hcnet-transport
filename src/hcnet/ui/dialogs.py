@@ -172,7 +172,7 @@ class LaneGroupDialog(QDialog):
         layout.addWidget(delay)
 
         note = QLabel(
-            "HCNet 1.0 calcula fw, fHV, fg, fp y fbb. Los factores fLU, fa y fturn "
+            "HCNet calcula fw, fHV, fg, fp y fbb. Los factores fLU, fa y fturn "
             "deben obtenerse del estudio y de la metodología aplicable. d₃ se introduce "
             "directamente; esta versión no la estima."
         )

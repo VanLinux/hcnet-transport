@@ -1,6 +1,6 @@
 """Motor matemático transparente para intersecciones semaforizadas.
 
-La versión 1.0 implementa el flujo analítico base de capacidad y demora para
+El módulo implementa el flujo analítico base de capacidad y demora para
 grupos de carriles con control de tiempo fijo. Las limitaciones metodológicas
 se documentan en ``docs/METHODOLOGY.md``.
 """
@@ -32,7 +32,7 @@ def _clamp(value: float, lower: float, upper: float) -> float:
 
 
 def adjustment_factors(group: LaneGroupInput) -> AdjustmentFactors:
-    """Calcula los factores de ajuste implementados en la versión 1.0."""
+    """Calcula los factores de ajuste implementados por el módulo."""
 
     lane_width = _clamp(1.0 + (group.lane_width_m - 3.6) / 9.0, 0.80, 1.20)
     heavy_share = group.heavy_vehicles_percent / 100.0

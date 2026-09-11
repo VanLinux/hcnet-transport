@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "application": "HCNet Transport",
-  "application_version": "1.0.0",
+  "application_version": "2.0.0",
   "project": {
     "name": "Av. Universidad × Eje 10 Sur (caso demostrativo)",
     "location": "Ciudad de México",

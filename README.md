@@ -8,12 +8,12 @@ Manual* (HCM).
 
 [![Pruebas](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml/badge.svg)](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml)
 [![Licencia: GPL v3](https://img.shields.io/badge/Licencia-GPLv3-blue.svg)](LICENSE)
-[![Versión](https://img.shields.io/badge/versión-1.0.0-176b87.svg)](CHANGELOG.md)
+[![Versión](https://img.shields.io/badge/versión-2.0.0-3f444b.svg)](CHANGELOG.md)
 [![Plataforma](https://img.shields.io/badge/plataforma-Linux-fcc624.svg)](#instalación-en-linux)
 
-## Versión 1.0
+## Versión 2.0
 
-HCNet Transport 1.0 inicia con el análisis de **intersecciones semaforizadas aisladas
+HCNet Transport 2.0 analiza **intersecciones semaforizadas aisladas
 con control de tiempo fijo**. El programa conserva los resultados intermedios para que
 el procedimiento pueda revisarse, enseñarse y compararse con un cálculo manual.
 
@@ -33,12 +33,16 @@ También proporciona:
 - gráfica comparativa del grado de saturación;
 - memoria de cálculo con ecuaciones y sustituciones;
 - validación de entradas y advertencias operacionales;
-- proyectos editables en JSON y exportación a CSV;
+- proyectos editables en JSON, resultados CSV y reporte técnico en LaTeX;
 - caso demostrativo hipotético de Ciudad de México.
+
+La versión 2.0 incorpora una interfaz de contraste neutral, una pantalla inicial con
+la identidad y alcance del software, y un reporte LaTeX completo con portada,
+identificación del analista, parámetros, resultados y memoria matemática.
 
 ## Instalación en Linux
 
-HCNet 1.0 requiere Python 3.11 o posterior. Por ahora, Linux es la única plataforma
+HCNet 2.0 requiere Python 3.11 o posterior. Por ahora, Linux es la única plataforma
 soportada y probada.
 
 ### Fedora
@@ -89,12 +93,21 @@ deactivate
 
 ## Uso básico
 
-1. Define nombre, ubicación, ciclo y periodo de análisis en **Proyecto**.
-2. Agrega o edita los movimientos en **Grupos de carriles**.
-3. Presiona **Calcular proyecto** o `F5`.
-4. Examina LOS, demora y grado de saturación en **Resultados**.
-5. Abre **Memoria de cálculo** para revisar factores, ecuaciones y sustituciones.
-6. Guarda el proyecto como `*.hcnet.json` o exporta los resultados a CSV.
+1. Revisa la presentación y las limitaciones en **Inicio y alcance**.
+2. Define nombre, ubicación, analista, ciclo y periodo de análisis en **Proyecto**.
+3. Agrega o edita los movimientos en **Grupos de carriles**.
+4. Presiona **Calcular proyecto** o `F5`.
+5. Examina LOS, demora y grado de saturación en **Resultados**.
+6. Abre **Reporte técnico** para revisar la memoria o exportar el documento `.tex`.
+7. Guarda el proyecto como `*.hcnet.json` o exporta los resultados a CSV.
+
+La exportación LaTeX requiere capturar el nombre del analista. El archivo generado
+puede compilarse con una distribución LaTeX convencional:
+
+```bash
+pdflatex nombre_del_reporte.tex
+pdflatex nombre_del_reporte.tex
+```
 
 Al abrir el programa se carga automáticamente un caso hipotético para explorar la
 interfaz. El archivo
@@ -107,7 +120,7 @@ El motor se mantiene separado de la interfaz gráfica:
 
 ```text
 src/hcnet/domain/   modelos, validación, cálculo y trazabilidad
-src/hcnet/io/       proyectos JSON y exportación CSV
+src/hcnet/io/       proyectos JSON y exportaciones CSV/LaTeX
 src/hcnet/ui/       interfaz de escritorio y visualizaciones
 tests/              verificación numérica y pruebas de persistencia
 ```
@@ -140,7 +153,7 @@ HCNet Transport es un proyecto independiente. **No está afiliado, certificado n
 respaldado** por el Transportation Research Board, National Academies, McTrans Center
 ni Highway Capacity Software (HCS).
 
-Esta primera versión implementa un subconjunto educativo del procedimiento y todavía
+El módulo actual implementa un subconjunto educativo del procedimiento y todavía
 no reproduce todos los tratamientos especiales del HCM 7. No debe considerarse un
 sustituto del manual ni utilizarse sin verificación en estudios profesionales firmados.
 Consulta [`NOTICE.md`](NOTICE.md) antes de aplicar sus resultados.

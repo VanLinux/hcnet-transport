@@ -9,6 +9,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from hcnet.domain.models import IntersectionProject, IntersectionResult
+from hcnet.domain.reporting import latex_report
 
 
 def load_project(path: str | Path) -> IntersectionProject:
@@ -28,29 +29,8 @@ def save_project(project: IntersectionProject, path: str | Path) -> Path:
     """Guarda de forma atómica para evitar proyectos parcialmente escritos."""
 
     destination = Path(path)
-    destination.parent.mkdir(parents=True, exist_ok=True)
     serialized = json.dumps(project.to_dict(), ensure_ascii=False, indent=2) + "\n"
-
-    temporary_path: Path | None = None
-    try:
-        with NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=destination.parent,
-            prefix=f".{destination.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as handle:
-            handle.write(serialized)
-            handle.flush()
-            os.fsync(handle.fileno())
-            temporary_path = Path(handle.name)
-        temporary_path.replace(destination)
-    finally:
-        if temporary_path is not None and temporary_path.exists():
-            temporary_path.unlink()
-
-    return destination
+    return _atomic_write_text(destination, serialized)
 
 
 def export_results_csv(
@@ -124,6 +104,41 @@ def export_results_csv(
                     "producto_factores": _number(row.factors.product, 4),
                 }
             )
+
+    return destination
+
+
+def export_report_tex(
+    project: IntersectionProject,
+    result: IntersectionResult,
+    path: str | Path,
+) -> Path:
+    """Exporta un reporte técnico completo como código fuente LaTeX UTF-8."""
+
+    destination = Path(path)
+    return _atomic_write_text(destination, latex_report(project, result))
+
+
+def _atomic_write_text(destination: Path, content: str) -> Path:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+            temporary_path = Path(handle.name)
+        temporary_path.replace(destination)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
 
     return destination
 

@@ -1,4 +1,4 @@
-"""Ventana principal de HCNet Transport 1.0."""
+"""Ventana principal de HCNet Transport."""
 
 from __future__ import annotations
 
@@ -29,7 +29,6 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QSplitter,
-    QStyle,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -44,7 +43,7 @@ from hcnet.domain.calculations import CalculationError, calculate_intersection
 from hcnet.domain.models import IntersectionProject, IntersectionResult, LaneGroupInput
 from hcnet.domain.reporting import calculation_trace_html
 from hcnet.domain.sample import demonstration_project
-from hcnet.io.project import export_results_csv, load_project, save_project
+from hcnet.io.project import export_report_tex, export_results_csv, load_project, save_project
 from hcnet.ui.charts import IntersectionSketch, SaturationChart
 from hcnet.ui.dialogs import LaneGroupDialog
 from hcnet.ui.styles import COLORS, LOS_COLORS
@@ -88,7 +87,7 @@ class MainWindow(QMainWindow):
         self.dirty = False
         self._loading = False
 
-        self.setWindowTitle("HCNet Transport 1.0")
+        self.setWindowTitle(f"HCNet Transport {__version__}")
         self.setMinimumSize(1080, 720)
         self.resize(1380, 880)
         self._set_icon()
@@ -103,23 +102,20 @@ class MainWindow(QMainWindow):
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
 
+    def _resource_icon(self, filename: str) -> QIcon:
+        path = Path(__file__).parents[1] / "resources" / filename
+        return QIcon(str(path)) if path.exists() else QIcon()
+
     def _create_actions(self) -> None:
-        style = self.style()
-        self.new_action = QAction(
-            style.standardIcon(QStyle.StandardPixmap.SP_FileIcon), "Nuevo", self
-        )
+        self.new_action = QAction(self._resource_icon("new.svg"), "Nuevo", self)
         self.new_action.setShortcut("Ctrl+N")
         self.new_action.triggered.connect(self.new_project)
 
-        self.open_action = QAction(
-            style.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton), "Abrir…", self
-        )
+        self.open_action = QAction(self._resource_icon("open.svg"), "Abrir…", self)
         self.open_action.setShortcut("Ctrl+O")
         self.open_action.triggered.connect(self.open_project)
 
-        self.save_action = QAction(
-            style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton), "Guardar", self
-        )
+        self.save_action = QAction(self._resource_icon("save.svg"), "Guardar", self)
         self.save_action.setShortcut("Ctrl+S")
         self.save_action.triggered.connect(self.save)
 
@@ -128,15 +124,19 @@ class MainWindow(QMainWindow):
         self.save_as_action.triggered.connect(self.save_as)
 
         self.export_action = QAction("Exportar resultados CSV…", self)
+        self.export_action.setIcon(self._resource_icon("export_csv.svg"))
         self.export_action.setShortcut("Ctrl+E")
         self.export_action.triggered.connect(self.export_csv)
+
+        self.export_tex_action = QAction("Exportar reporte LaTeX…", self)
+        self.export_tex_action.setIcon(self._resource_icon("report_tex.svg"))
+        self.export_tex_action.setShortcut("Ctrl+Shift+E")
+        self.export_tex_action.triggered.connect(self.export_tex)
 
         self.demo_action = QAction("Cargar caso demostrativo", self)
         self.demo_action.triggered.connect(self.load_demo)
 
-        self.calculate_action = QAction(
-            style.standardIcon(QStyle.StandardPixmap.SP_MediaPlay), "Calcular", self
-        )
+        self.calculate_action = QAction(self._resource_icon("calculate.svg"), "Calcular", self)
         self.calculate_action.setShortcut("F5")
         self.calculate_action.triggered.connect(self.calculate)
 
@@ -156,7 +156,9 @@ class MainWindow(QMainWindow):
         file_menu = self.menuBar().addMenu("Archivo")
         file_menu.addActions([self.new_action, self.open_action])
         file_menu.addSeparator()
-        file_menu.addActions([self.save_action, self.save_as_action, self.export_action])
+        file_menu.addActions([self.save_action, self.save_as_action])
+        export_menu = file_menu.addMenu("Exportar")
+        export_menu.addActions([self.export_action, self.export_tex_action])
         file_menu.addSeparator()
         file_menu.addAction(self.quit_action)
 
@@ -175,6 +177,7 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.calculate_action)
         toolbar.addSeparator()
         toolbar.addAction(self.export_action)
+        toolbar.addAction(self.export_tex_action)
         self.addToolBar(toolbar)
 
     def _build_ui(self) -> None:
@@ -197,7 +200,7 @@ class MainWindow(QMainWindow):
         header.addStretch()
         version = QLabel(f"VERSIÓN {__version__}")
         version.setStyleSheet(
-            "background: #0B3954; color: white; border-radius: 5px; "
+            "background: #30343B; color: white; border-radius: 5px; "
             "padding: 6px 10px; font-weight: 700;"
         )
         header.addWidget(version, 0, Qt.AlignmentFlag.AlignTop)
@@ -205,16 +208,16 @@ class MainWindow(QMainWindow):
 
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
+        self.scope_tab = self._build_scope_tab()
         self.project_tab = self._build_project_tab()
         self.groups_tab = self._build_groups_tab()
         self.results_tab = self._build_results_tab()
         self.trace_tab = self._build_trace_tab()
-        self.scope_tab = self._build_scope_tab()
-        self.tabs.addTab(self.project_tab, "1  Proyecto")
-        self.tabs.addTab(self.groups_tab, "2  Grupos de carriles")
-        self.tabs.addTab(self.results_tab, "3  Resultados")
-        self.tabs.addTab(self.trace_tab, "4  Memoria de cálculo")
-        self.tabs.addTab(self.scope_tab, "Alcance")
+        self.tabs.addTab(self.scope_tab, "1  Inicio y alcance")
+        self.tabs.addTab(self.project_tab, "2  Proyecto")
+        self.tabs.addTab(self.groups_tab, "3  Grupos de carriles")
+        self.tabs.addTab(self.results_tab, "4  Resultados")
+        self.tabs.addTab(self.trace_tab, "5  Reporte técnico")
         root.addWidget(self.tabs, 1)
 
         self.setCentralWidget(central)
@@ -226,7 +229,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 12, 0, 0)
 
         banner = QLabel(
-            "Módulo 1.0: análisis educativo de una intersección semaforizada aislada "
+            "Módulo actual: análisis educativo de una intersección semaforizada aislada "
             "con control de tiempo fijo y periodo de demanda uniforme."
         )
         banner.setObjectName("infoBanner")
@@ -455,14 +458,20 @@ class MainWindow(QMainWindow):
 
         header = QHBoxLayout()
         title_box = QVBoxLayout()
-        title = QLabel("Memoria de cálculo transparente")
+        title = QLabel("Reporte técnico y memoria de cálculo")
         title.setObjectName("sectionTitle")
-        subtitle = QLabel("Revisa ecuaciones, sustituciones, factores y resultados intermedios.")
+        subtitle = QLabel(
+            "Revisa las ecuaciones por grupo o exporta el informe completo como LaTeX."
+        )
         subtitle.setObjectName("pageSubtitle")
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
         header.addLayout(title_box)
         header.addStretch()
+        export_button = QPushButton("Exportar reporte .tex")
+        export_button.setObjectName("primaryButton")
+        export_button.clicked.connect(self.export_tex)
+        header.addWidget(export_button)
         self.trace_selector = QComboBox()
         self.trace_selector.setMinimumWidth(290)
         self.trace_selector.currentIndexChanged.connect(self.refresh_trace)
@@ -481,20 +490,51 @@ class MainWindow(QMainWindow):
         browser = QTextBrowser()
         browser.setOpenExternalLinks(True)
         browser.setHtml(
-            """
+            f"""
             <style>
-              body { font-family: sans-serif; color: #233746; margin: 18px; }
-              h2, h3 { color: #0b3954; }
-              .notice { background: #fff3cd; border-left: 4px solid #d99b00;
-                        padding: 10px; margin: 12px 0; }
-              .ok { background: #eaf5ef; border-left: 4px solid #18794e;
-                    padding: 10px; margin: 12px 0; }
-              li { margin: 5px 0; }
+              body {{ font-family: sans-serif; color: #202124; margin: 22px; }}
+              h1 {{ color: #202124; font-size: 26px; margin-bottom: 2px; }}
+              h2, h3 {{ color: #30343b; }}
+              .lead {{ color: #5f6368; font-size: 14px; margin-bottom: 18px; }}
+              .panel {{ background: #f1f3f4; border-left: 4px solid #5f6368;
+                        padding: 12px; margin: 14px 0; }}
+              .scope {{ background: #f7f7f7; border: 1px solid #dadce0;
+                        padding: 12px; margin: 14px 0; }}
+              table {{ border-collapse: collapse; margin: 10px 0 18px 0; width: 100%; }}
+              th, td {{ border-bottom: 1px solid #dadce0; padding: 7px; text-align: left; }}
+              th {{ color: #30343b; width: 180px; }}
+              li {{ margin: 5px 0; }}
+              a {{ color: #3f444b; }}
             </style>
-            <h2>Alcance de HCNet Transport 1.0</h2>
-            <div class="ok"><b>Incluido:</b> intersección semaforizada aislada, grupos de
-            carriles, control de tiempo fijo, factores básicos de saturación, capacidad,
-            X, demora d₁+d₂+d₃ y LOS A–F.</div>
+            <h1>HCNet Transport</h1>
+            <p class="lead"><b>Highway Capacity and Network Evaluation Tool</b><br>
+            Herramienta libre para el análisis transparente de capacidad,
+            desempeño operacional y nivel de servicio.</p>
+
+            <table>
+              <tr><th>Versión</th><td>{__version__}</td></tr>
+              <tr><th>Desarrollador</th><td>Héctor Alonso Benítez García</td></tr>
+              <tr><th>Licencia</th><td>GNU General Public License v3.0</td></tr>
+              <tr><th>Plataforma actual</th><td>Linux</td></tr>
+              <tr><th>Repositorio</th><td>
+                <a href="https://github.com/VanLinux/hcnet-transport">
+                github.com/VanLinux/hcnet-transport</a></td></tr>
+            </table>
+
+            <div class="scope"><b>Alcance implementado:</b> análisis de una intersección
+            semaforizada aislada mediante grupos de carriles, control de tiempo fijo,
+            factores de ajuste del flujo de saturación, capacidad, grado de saturación
+            X, demora d₁+d₂+d₃ y nivel de servicio A–F.</div>
+
+            <h3>Flujo de trabajo</h3>
+            <ol>
+              <li>Identifica el estudio y captura el nombre del analista.</li>
+              <li>Configura los grupos de carriles y sus condiciones operacionales.</li>
+              <li>Calcula y revisa el diagnóstico de la intersección.</li>
+              <li>Examina la memoria matemática y exporta resultados CSV o el reporte
+              técnico completo en LaTeX.</li>
+            </ol>
+
             <h3>Supuestos principales</h3>
             <ul>
               <li>Demanda estacionaria durante el periodo de análisis.</li>
@@ -511,10 +551,11 @@ class MainWindow(QMainWindow):
               <li>Glorietas, intersecciones no semaforizadas, autopistas y carreteras.</li>
               <li>Calibración automática para condiciones mexicanas.</li>
             </ul>
-            <div class="notice"><b>Aviso:</b> es una herramienta educativa independiente,
+
+            <div class="panel"><b>Uso responsable:</b> es una herramienta educativa
+            independiente,
             no una implementación certificada del HCM 7 ni un sustituto de HCS. Verifica
             los resultados antes de utilizarlos en un estudio profesional.</div>
-            <p>Documentación técnica completa: <code>docs/METHODOLOGY.md</code></p>
             """
         )
         layout.addWidget(browser)
@@ -880,6 +921,41 @@ class MainWindow(QMainWindow):
             return
         self.statusBar().showMessage(f"Resultados exportados: {path}", 5000)
 
+    def export_tex(self) -> None:
+        self.project = self._project_from_ui()
+        if not self.project.analyst:
+            QMessageBox.information(
+                self,
+                "Nombre del analista requerido",
+                "Ingresa el nombre del analista en la pestaña Proyecto antes de "
+                "generar el reporte técnico.",
+            )
+            self.tabs.setCurrentWidget(self.project_tab)
+            self.analyst_edit.setFocus()
+            return
+        if not self.calculate(switch_tab=False):
+            return
+        assert self.last_result is not None
+        suggested = _safe_filename(self.project.name) + "_reporte_hcnet.tex"
+        initial = (self.current_path.parent if self.current_path else Path.home()) / suggested
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar reporte técnico",
+            str(initial),
+            "Documento LaTeX (*.tex)",
+        )
+        if not filename:
+            return
+        path = Path(filename)
+        if path.suffix.lower() != ".tex":
+            path = path.with_suffix(".tex")
+        try:
+            export_report_tex(self.project, self.last_result, path)
+        except OSError as exc:
+            QMessageBox.critical(self, "No se pudo exportar", str(exc))
+            return
+        self.statusBar().showMessage(f"Reporte LaTeX exportado: {path}", 5000)
+
     def _mark_dirty(self, *_args) -> None:
         if self._loading:
             return
@@ -891,7 +967,7 @@ class MainWindow(QMainWindow):
     def _refresh_window_title(self) -> None:
         name = self.current_path.name if self.current_path else self.project.name
         marker = " *" if self.dirty else ""
-        self.setWindowTitle(f"{name}{marker} — HCNet Transport 1.0")
+        self.setWindowTitle(f"{name}{marker} — HCNet Transport {__version__}")
 
     def _confirm_discard(self) -> bool:
         if not self.dirty:

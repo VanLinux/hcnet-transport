@@ -42,7 +42,7 @@ class IntersectionSketch(QWidget):
         painter.drawRect(QRectF(cx - road / 2, 0, road, height))
         painter.drawRect(QRectF(0, cy - road / 2, width, road))
 
-        pen = QPen(QColor("#E8D873"), 2, Qt.PenStyle.DashLine)
+        pen = QPen(QColor("#D5D7DA"), 2, Qt.PenStyle.DashLine)
         painter.setPen(pen)
         painter.drawLine(int(cx), 0, int(cx), int(cy - road / 2))
         painter.drawLine(int(cx), int(cy + road / 2), int(cx), height)
