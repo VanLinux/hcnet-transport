@@ -9,7 +9,6 @@ Manual* (HCM).
 [![Pruebas](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml/badge.svg)](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml)
 [![Licencia: GPL v3](https://img.shields.io/badge/Licencia-GPLv3-blue.svg)](LICENSE)
 [![Versión](https://img.shields.io/badge/versión-2.0.0-3f444b.svg)](CHANGELOG.md)
-[![Plataforma](https://img.shields.io/badge/plataforma-Linux-fcc624.svg)](#instalación-en-linux)
 
 ## Versión 2.0
 
@@ -39,77 +38,6 @@ También proporciona:
 La versión 2.0 incorpora una interfaz de contraste neutral, una pantalla inicial con
 la identidad y alcance del software, y un reporte LaTeX completo con portada,
 identificación del analista, parámetros, resultados y memoria matemática.
-
-## Manual de usuario
-
-El manual oficial para HCNet Transport 2.0 está disponible en tamaño carta e incluye
-operación completa, capturas de la interfaz, fundamento metodológico, validaciones,
-caso demostrativo, referencia rápida e índice general:
-
-- [Manual de usuario en PDF](docs/manual/HCNet_Transport_Manual_Usuario.pdf)
-- [Código fuente del manual en LaTeX](docs/manual/HCNet_Transport_Manual_Usuario.tex)
-
-Para recompilarlo desde `docs/manual`:
-
-```bash
-lualatex HCNet_Transport_Manual_Usuario.tex
-lualatex HCNet_Transport_Manual_Usuario.tex
-```
-
-Las capturas requeridas y sus nombres se documentan en
-[`docs/manual/README.md`](docs/manual/README.md). El manual también genera un
-recuadro de reserva si una imagen no está disponible durante una compilación de trabajo.
-
-## Instalación en Linux
-
-HCNet 2.0 requiere Python 3.11 o posterior. Por ahora, Linux es la única plataforma
-soportada y probada.
-
-### Fedora
-
-```bash
-sudo dnf install python3 python3-pip
-git clone https://github.com/VanLinux/hcnet-transport.git
-cd hcnet-transport
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
-hcnet
-```
-
-### Ubuntu y derivados
-
-```bash
-sudo apt install python3 python3-venv python3-pip libxcb-cursor0
-git clone https://github.com/VanLinux/hcnet-transport.git
-cd hcnet-transport
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
-hcnet
-```
-
-En ejecuciones posteriores basta con:
-
-```bash
-cd ~/hcnet-transport
-source .venv/bin/activate
-hcnet
-```
-
-También puede iniciarse con:
-
-```bash
-python -m hcnet
-```
-
-Para salir del entorno virtual al terminar:
-
-```bash
-deactivate
-```
 
 ## Uso básico
 
