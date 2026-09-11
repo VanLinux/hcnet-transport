@@ -43,8 +43,8 @@ identificación del analista, parámetros, resultados y memoria matemática.
 ## Manual de usuario
 
 El manual oficial para HCNet Transport 2.0 está disponible en tamaño carta e incluye
-instalación en Linux, operación completa, capturas de la interfaz, fundamento
-metodológico, validaciones, caso demostrativo, referencia rápida e índice alfabético:
+operación completa, capturas de la interfaz, fundamento metodológico, validaciones,
+caso demostrativo, referencia rápida e índice general:
 
 - [Manual de usuario en PDF](docs/manual/HCNet_Transport_Manual_Usuario.pdf)
 - [Código fuente del manual en LaTeX](docs/manual/HCNet_Transport_Manual_Usuario.tex)
@@ -52,11 +52,13 @@ metodológico, validaciones, caso demostrativo, referencia rápida e índice alf
 Para recompilarlo desde `docs/manual`:
 
 ```bash
-pdflatex HCNet_Transport_Manual_Usuario.tex
-makeindex HCNet_Transport_Manual_Usuario.idx
-pdflatex HCNet_Transport_Manual_Usuario.tex
-pdflatex HCNet_Transport_Manual_Usuario.tex
+lualatex HCNet_Transport_Manual_Usuario.tex
+lualatex HCNet_Transport_Manual_Usuario.tex
 ```
+
+Las capturas requeridas y sus nombres se documentan en
+[`docs/manual/README.md`](docs/manual/README.md). El manual también genera un
+recuadro de reserva si una imagen no está disponible durante una compilación de trabajo.
 
 ## Instalación en Linux
 

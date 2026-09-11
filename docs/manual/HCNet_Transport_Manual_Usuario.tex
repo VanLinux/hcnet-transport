@@ -2,11 +2,13 @@
 
 % -----------------------------------------------------------------------------
 % Manual de usuario de HCNet Transport 2.0.0
-% Compilacion recomendada: pdflatex -> makeindex -> pdflatex -> pdflatex
+% Compilacion recomendada: lualatex -> lualatex
 % -----------------------------------------------------------------------------
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage{lmodern}
+\usepackage{fontspec}
+\defaultfontfeatures{Ligatures=TeX}
+\setmainfont{Latin Modern Roman}
+\setsansfont{Latin Modern Sans}
+\setmonofont{Latin Modern Mono}
 \usepackage[provide=*,spanish]{babel}
 \usepackage[letterpaper,top=2.05cm,bottom=2.05cm,left=2.15cm,right=2.15cm,
             headheight=16pt,headsep=0.55cm,footskip=0.8cm]{geometry}
@@ -22,7 +24,6 @@
 \usepackage{caption}
 \usepackage{float}
 \usepackage{microtype}
-\usepackage{makeidx}
 \usepackage[hidelinks]{hyperref}
 
 \hypersetup{
@@ -32,8 +33,7 @@
   pdfkeywords={HCNet, HCM, intersecciones semaforizadas, capacidad, nivel de servicio}
 }
 
-\graphicspath{{assets/}}
-\makeindex
+\graphicspath{{assets/}{docs/manual/assets/}}
 
 % --- Identidad documental ----------------------------------------------------
 \newcommand{\softwareName}{HCNet Transport}
@@ -68,6 +68,7 @@
 \captionsetup{font=small,labelfont={bf,color=hcGraphite},textfont={color=hcGray},
               skip=5pt}
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 \newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
 \newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
 
@@ -141,6 +142,27 @@
   borderline west={3pt}{0pt}{hcAccent},left=4mm,right=3mm,top=2mm,bottom=2mm
 }
 
+% --- Capturas ---------------------------------------------------------------
+% Busca las imagenes al compilar desde docs/manual o desde la raiz del repositorio.
+% Si una captura no esta disponible, conserva la maquetacion y muestra un recuadro.
+\newcommand{\manualimage}[2][\textwidth]{%
+  \IfFileExists{assets/#2}{%
+    \includegraphics[width=#1]{assets/#2}%
+  }{%
+    \IfFileExists{docs/manual/assets/#2}{%
+      \includegraphics[width=#1]{docs/manual/assets/#2}%
+    }{%
+      \begin{tcolorbox}[
+        width=#1,height=6.2cm,colback=hcPale,colframe=hcLine,
+        halign=center,valign=center,arc=1mm]
+        \textcolor{hcGray}{\bfseries Captura pendiente}\par
+        \vspace{2mm}
+        \texttt{\detokenize{#2}}
+      \end{tcolorbox}%
+    }%
+  }%
+}
+
 % --- Listados de terminal ----------------------------------------------------
 \lstdefinestyle{hcnetterminal}{
   basicstyle=\ttfamily\small,
@@ -157,14 +179,9 @@
 
 % --- Nombres en espanol ------------------------------------------------------
 \renewcommand{\contentsname}{Índice general}
-\renewcommand{\listfigurename}{Índice de figuras}
-\renewcommand{\listtablename}{Índice de tablas}
 \renewcommand{\bibname}{Referencias}
-\renewcommand{\indexname}{Índice alfabético}
 \addto\captionsspanish{
   \renewcommand{\contentsname}{Índice general}
-  \renewcommand{\listfigurename}{Índice de figuras}
-  \renewcommand{\listtablename}{Índice de cuadros}
   \renewcommand{\bibname}{Referencias}
 }
 
@@ -196,17 +213,16 @@
 
   \vspace{1.0cm}
   \begin{keybox}[Finalidad del documento]
-  Guía para instalar, configurar, operar y revisar HCNet Transport en Linux.
-  Incluye la base matemática implementada, criterios de nivel de servicio,
-  validación de datos, exportación de resultados y un caso demostrativo
-  reproducible.
+  Guía para configurar, operar y revisar HCNet Transport. Incluye la base
+  matemática implementada, criterios de nivel de servicio, validación de datos,
+  exportación de resultados y un caso demostrativo reproducible.
   \end{keybox}
 
   \vfill
-  \begin{tabularx}{\textwidth}{@{}p{4.2cm}Y@{}}
+  \begin{tabularx}{\textwidth}{@{}L{4.2cm}Y@{}}
     \textbf{Desarrollador} & \developerName \\
     \textbf{Licencia del software} & GNU General Public License v3.0 only \\
-    \textbf{Plataforma de esta edición} & Linux \\
+    \textbf{Cobertura del manual} & Operación funcional de la aplicación \\
     \textbf{Fecha de publicación} & \releaseDate \\
     \textbf{Repositorio oficial} & \href{\repositoryURL}{github.com/VanLinux/hcnet-transport} \\
   \end{tabularx}
@@ -224,7 +240,7 @@
 \chapter*{Control del documento}
 \addcontentsline{toc}{chapter}{Control del documento}
 
-\begin{tabularx}{\textwidth}{@{}p{4.6cm}Y@{}}
+\begin{tabularx}{\textwidth}{@{}L{4.6cm}Y@{}}
 \toprule
 \rowcolor{hcPale}
 \textbf{Elemento} & \textbf{Identificación} \\
@@ -233,7 +249,7 @@ Título & Manual de usuario de HCNet Transport \\
 Edición del manual & \manualVersion \\
 Versión documentada del software & \softwareVersion \\
 Autor y desarrollador & \developerName \\
-Sistema operativo objetivo & Distribuciones Linux de escritorio \\
+Cobertura & Operación funcional independiente del sistema operativo \\
 Licencia del software & GNU GPL v3.0 only \\
 Idioma & Español \\
 Estado & Edición inicial para revisión de interfaz y operación \\
@@ -250,7 +266,7 @@ Estado & Edición inicial para revisión de interfaz y operación \\
 \textbf{Edición} & \textbf{Fecha} & \textbf{Descripción} \\
 \midrule
 1.0 & Septiembre de 2026 & Primera edición integral para HCNet Transport
-2.0.0; instalación en Linux, operación, metodología, reportes y caso de prueba. \\
+2.0.0; operación, metodología, reportes y caso de prueba. \\
 \bottomrule
 \end{tabularx}
 
@@ -282,12 +298,6 @@ el nombre del analista para conservar trazabilidad.
 \clearpage
 \tableofcontents
 \clearpage
-\listoffigures
-\addcontentsline{toc}{chapter}{Índice de figuras}
-\clearpage
-\listoftables
-\addcontentsline{toc}{chapter}{Índice de tablas}
-\clearpage
 
 \pagenumbering{arabic}
 
@@ -300,7 +310,6 @@ el nombre del analista para conservar trazabilidad.
 Este manual explica el uso completo de \softwareName\ \softwareVersion\ para
 analizar la capacidad, el grado de saturación, la demora de control y el nivel de
 servicio de grupos de carriles en una intersección semaforizada aislada.
-\index{manual!propósito}
 
 El documento está dirigido a profesionales de tránsito, docentes, investigadores
 y estudiantes con conocimientos de ingeniería de transporte. Se presupone que
@@ -354,7 +363,7 @@ cola percentil 95.
 
 \section{Convenciones usadas en este documento}
 
-\begin{tabularx}{\textwidth}{@{}p{3.2cm}Y@{}}
+\begin{tabularx}{\textwidth}{@{}L{3.2cm}Y@{}}
 \toprule
 \rowcolor{hcPale}
 \textbf{Convención} & \textbf{Significado} \\
@@ -370,95 +379,14 @@ Recuadro rojo & Restricción del modelo o riesgo de interpretación. \\
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.98\textwidth]{01_inicio_alcance.png}
+  \manualimage[0.98\textwidth]{01_inicio_alcance.png}
   \caption{Pestaña inicial con propósito, flujo de trabajo, alcance y licencia.}
   \label{fig:inicio}
 \end{figure}
 
 La pestaña \textbf{Inicio y alcance}, mostrada en la figura~\ref{fig:inicio}, es
 el punto de entrada de la aplicación. Se recomienda leerla antes de iniciar el
-primer proyecto.\index{alcance}\index{licencia}
-
-% =============================================================================
-\chapter{Instalación y puesta en marcha en Linux}
-% =============================================================================
-
-\section{Requisitos}
-
-\begin{itemize}
-  \item distribución Linux con entorno gráfico de escritorio;
-  \item Python 3.11 o posterior;
-  \item \texttt{pip} y soporte para entornos virtuales;
-  \item acceso al repositorio oficial durante la instalación;
-  \item bibliotecas de escritorio requeridas por Qt/PySide6.
-\end{itemize}
-
-\begin{keybox}[Aislamiento del entorno]
-Instale HCNet dentro de un entorno virtual \texttt{.venv}. Esta práctica evita
-mezclar sus dependencias con los paquetes del sistema y facilita reproducir la
-instalación.\index{entorno virtual}
-\end{keybox}
-
-\section{Instalación en Fedora}
-
-Abra una terminal y ejecute:
-
-\begin{lstlisting}
-sudo dnf install python3 python3-pip
-git clone https://github.com/VanLinux/hcnet-transport.git
-cd hcnet-transport
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
-hcnet
-\end{lstlisting}
-
-\section{Instalación en Ubuntu o Debian}
-
-\begin{lstlisting}
-sudo apt install python3 python3-venv python3-pip libxcb-cursor0
-git clone https://github.com/VanLinux/hcnet-transport.git
-cd hcnet-transport
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
-hcnet
-\end{lstlisting}
-
-\section{Inicios posteriores}
-
-Si el repositorio se encuentra en \texttt{\textasciitilde/hcnet-transport}:
-
-\begin{lstlisting}
-cd ~/hcnet-transport
-source .venv/bin/activate
-hcnet
-\end{lstlisting}
-
-Al terminar la sesión puede desactivar el entorno:
-
-\begin{lstlisting}
-deactivate
-\end{lstlisting}
-
-\section{Comprobación de la instalación}
-
-La instalación es satisfactoria cuando aparece la ventana principal, se muestra
-la pestaña \textbf{Inicio y alcance} y el título de la ventana identifica la
-versión 2.0.0. Para verificar además el núcleo de cálculo y la lectura de archivos,
-ejecute la batería de pruebas desde el directorio del proyecto:
-
-\begin{lstlisting}
-pytest
-\end{lstlisting}
-
-\begin{tipbox}
-Conserve el entorno virtual activo durante toda la sesión. Si la orden
-\texttt{hcnet} no existe, verifique primero que el indicador del entorno
-\texttt{(.venv)} aparezca en la terminal y repita la instalación editable.
-\end{tipbox}
+primer proyecto.
 
 % =============================================================================
 \chapter{Interfaz y navegación}
@@ -473,7 +401,7 @@ La tabla~\ref{tab:pestanas} resume las cinco pestañas.
 \centering
 \caption{Pestañas de la interfaz principal.}
 \label{tab:pestanas}
-\begin{tabularx}{\textwidth}{@{}C{1.3cm}p{3.3cm}Y@{}}
+\begin{tabularx}{\textwidth}{@{}C{1.3cm}L{3.3cm}Y@{}}
 \toprule
 \rowcolor{hcPale}
 \textbf{Orden} & \textbf{Pestaña} & \textbf{Función} \\
@@ -495,7 +423,7 @@ permite exportar el documento LaTeX. \\
 \small
 \setlength{\LTpre}{3pt}
 \setlength{\LTpost}{3pt}
-\begin{longtable}{@{}p{2.5cm}p{4.1cm}p{2.7cm}p{5.3cm}@{}}
+\begin{longtable}{@{}L{2.5cm}L{4.1cm}L{2.7cm}L{5.3cm}@{}}
 \caption{Acciones disponibles en los menús.}\label{tab:menus}\\
 \toprule
 \rowcolor{hcPale}
@@ -532,7 +460,7 @@ Ayuda & Acerca de & - & Muestra versión, licencia y autoría. \\
 
 La pestaña \textbf{Proyecto} concentra la identificación del estudio y los dos
 parámetros temporales comunes a todos los grupos: longitud de ciclo y periodo de
-análisis.\index{proyecto}
+análisis.
 
 \begin{warningbox}[Cambios sin guardar]
 Antes de abrir otro archivo, crear un proyecto o cargar el caso demostrativo,
@@ -542,7 +470,7 @@ debe guardar con otro nombre si se desea conservar.
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.98\textwidth]{02_proyecto.png}
+  \manualimage[0.98\textwidth]{02_proyecto.png}
   \caption{Identificación y parámetros comunes del proyecto.}
   \label{fig:proyecto}
 \end{figure}
@@ -551,7 +479,7 @@ debe guardar con otro nombre si se desea conservar.
 \centering
 \caption{Campos del proyecto.}
 \label{tab:campos-proyecto}
-\begin{tabularx}{\textwidth}{@{}p{3.7cm}p{3.1cm}Y@{}}
+\begin{tabularx}{\textwidth}{@{}L{3.7cm}L{3.1cm}Y@{}}
 \toprule
 \rowcolor{hcPale}
 \textbf{Campo} & \textbf{Formato} & \textbf{Uso} \\
@@ -579,8 +507,7 @@ y toda modificación aplicada a factores por defecto.
 
 Los proyectos se almacenan como JSON UTF-8 con la extensión recomendada
 \texttt{.hcnet.json}. El archivo contiene versión de esquema, versión de la
-aplicación, datos generales y todos los grupos de carriles.\index{archivo de
-proyecto}\index{JSON}
+aplicación, datos generales y todos los grupos de carriles.
 
 \begin{procedurebox}[Crear y guardar un proyecto]
 \begin{enumerate}
@@ -588,8 +515,8 @@ proyecto}\index{JSON}
   \item Complete los campos de identificación y parámetros temporales.
   \item Agregue por lo menos un grupo de carriles.
   \item Seleccione \textbf{Archivo > Guardar como}.
-  \item Use un nombre que identifique ubicación, escenario y fecha, por ejemplo
-        \texttt{universidad\_base\_2026.hcnet.json}.
+  \item Use un nombre breve que identifique el escenario, por ejemplo
+        \path{universidad_base_2026.hcnet.json}.
 \end{enumerate}
 \end{procedurebox}
 
@@ -607,11 +534,10 @@ Un grupo de carriles reúne uno o varios carriles que operan con condiciones de
 demanda, señalización y uso suficientemente homogéneas para ser analizados como
 una unidad. La formación del grupo es una decisión de ingeniería previa al
 cálculo. HCNet no asigna automáticamente movimientos a carriles compartidos.
-\index{grupo de carriles}
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.98\textwidth]{03_grupos_carriles.png}
+  \manualimage[0.98\textwidth]{03_grupos_carriles.png}
   \caption{Lista de grupos de carriles del caso demostrativo.}
   \label{fig:grupos}
 \end{figure}
@@ -625,12 +551,12 @@ movimiento y cualquier dato que corresponda.
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.74\textwidth]{04_grupo_datos_basicos.png}
+  \manualimage[0.74\textwidth]{04_grupo_datos_basicos.png}
   \caption{Captura de demanda, geometría y tiempo efectivo de un grupo.}
   \label{fig:grupo-basico}
 \end{figure}
 
-\begin{longtable}{@{}p{3.0cm}p{2.0cm}p{2.4cm}p{6.6cm}@{}}
+\begin{longtable}{@{}L{3.0cm}C{2.0cm}L{2.4cm}L{6.6cm}@{}}
 \caption{Entradas básicas de un grupo de carriles.}\label{tab:entradas-basicas}\\
 \toprule
 \rowcolor{hcPale}
@@ -671,12 +597,12 @@ analista debe justificar la aplicabilidad metodológica de cada dato.
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.74\textwidth]{05_grupo_ajustes.png}
+  \manualimage[0.74\textwidth]{05_grupo_ajustes.png}
   \caption{Factores de ajuste y parámetros de demora incremental.}
   \label{fig:grupo-ajustes}
 \end{figure}
 
-\begin{longtable}{@{}p{3.6cm}p{1.7cm}p{2.2cm}p{6.5cm}@{}}
+\begin{longtable}{@{}L{3.6cm}C{1.7cm}L{2.2cm}L{6.5cm}@{}}
 \caption{Ajustes del grupo de carriles.}\label{tab:ajustes}\\
 \toprule
 \rowcolor{hcPale}
@@ -741,7 +667,7 @@ errores.
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.98\textwidth]{06_resultados.png}
+  \manualimage[0.98\textwidth]{06_resultados.png}
   \caption{Resumen, gráfica y tabla de resultados del caso demostrativo.}
   \label{fig:resultados}
 \end{figure}
@@ -775,7 +701,7 @@ tabla~\ref{tab:salidas-grupo}. Al seleccionar una fila, la pestaña
 \centering
 \caption{Salidas principales por grupo de carriles.}
 \label{tab:salidas-grupo}
-\begin{tabularx}{\textwidth}{@{}p{3.4cm}p{2.4cm}Y@{}}
+\begin{tabularx}{\textwidth}{@{}L{3.4cm}L{2.4cm}Y@{}}
 \toprule
 \rowcolor{hcPale}
 \textbf{Salida} & \textbf{Unidad} & \textbf{Interpretación} \\
@@ -813,7 +739,7 @@ nivel de servicio e indicadores diagnósticos.
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.98\textwidth]{07_reporte_tecnico.png}
+  \manualimage[0.98\textwidth]{07_reporte_tecnico.png}
   \caption{Memoria de cálculo trazable para el grupo seleccionado.}
   \label{fig:reporte}
 \end{figure}
@@ -857,7 +783,7 @@ de quien efectuó y revisó el análisis.
 Seleccione \textbf{Archivo > Exportar resultados CSV} o Ctrl+E. El archivo usa
 codificación UTF-8 con marca BOM para mejorar la apertura en hojas de cálculo y
 contiene una fila por grupo. Incluye identificación, demanda, capacidad, demora,
-nivel de servicio, indicadores diagnósticos y factores de ajuste.\index{CSV}
+nivel de servicio, indicadores diagnósticos y factores de ajuste.
 
 \begin{tipbox}[Control de versiones del estudio]
 Guarde juntos el proyecto \texttt{.hcnet.json}, el CSV, el reporte \texttt{.tex}
@@ -866,7 +792,7 @@ y el PDF compilado. Evite sobrescribir escenarios; use sufijos como
 \end{tipbox}
 
 % =============================================================================
-\chapter{Fundamento metodológico implementado}
+\chapter{Fundamento metodológico}
 \label{chap:metodologia}
 % =============================================================================
 
@@ -876,7 +802,7 @@ HCNet implementa un flujo de trabajo transparente, inspirado en conceptos del
 análisis operacional de intersecciones semaforizadas del \textit{Highway Capacity
 Manual}, séptima edición \cite{hcm2022}. Las expresiones de este capítulo describen
 el comportamiento exacto de la versión \softwareVersion; por ello permiten
-reproducir y auditar el resultado del software.\index{HCM}
+reproducir y auditar el resultado del software.
 
 \begin{limitbox}[Alcance de las ecuaciones]
 La implementación es deliberadamente acotada y educativa. No representa todos
@@ -1033,7 +959,7 @@ presione F5.
 \centering
 \caption{Parámetros generales del caso demostrativo.}
 \label{tab:demo-general}
-\begin{tabularx}{\textwidth}{@{}p{4.4cm}Y@{}}
+\begin{tabularx}{\textwidth}{@{}L{4.4cm}Y@{}}
 \toprule
 \rowcolor{hcPale}
 \textbf{Elemento} & \textbf{Valor} \\
@@ -1137,7 +1063,7 @@ negativos, o $d_3<0$.
 El cálculo puede continuar cuando el nombre del proyecto está vacío, $C$ queda
 fuera de 30 a 240 s, $T>1$ h, $s_0$ queda fuera de 1\,500 a 2\,200 pc/h/carril o
 algún factor supera 1.5. Una advertencia no invalida automáticamente el análisis,
-pero debe ser revisada y documentada.\index{validación}\index{advertencia}
+pero debe ser revisada y documentada.
 
 \begin{table}[H]
 \centering
@@ -1160,51 +1086,30 @@ pero debe ser revisada y documentada.\index{validación}\index{advertencia}
 \end{tabularx}
 \end{table}
 
-\section{Problemas frecuentes en Linux}
+\section{Problemas frecuentes de operación}
 
-\begin{longtable}{@{}p{4.4cm}p{5.0cm}p{4.9cm}@{}}
-\caption{Diagnóstico básico de ejecución.}\label{tab:problemas}\\
+\begin{table}[H]
+\centering
+\caption{Diagnóstico básico de la operación.}
+\label{tab:problemas}
+\begin{tabularx}{\textwidth}{@{}L{4.0cm}L{5.0cm}Y@{}}
 \toprule
 \rowcolor{hcPale}
-\textbf{Síntoma} & \textbf{Causa probable} & \textbf{Acción recomendada} \\
+\textbf{Situación} & \textbf{Causa probable} & \textbf{Acción recomendada} \\
 \midrule
-\endfirsthead
-\toprule
-\rowcolor{hcPale}
-\textbf{Síntoma} & \textbf{Causa probable} & \textbf{Acción recomendada} \\
-\midrule
-\endhead
-\texttt{hcnet: command not found} & Entorno virtual inactivo o paquete no
-instalado. & Active \texttt{.venv} y repita \texttt{pip install -e ".[dev]"}. \\
-Error de módulo PySide6 & Dependencias instaladas fuera del entorno o instalación
-incompleta. & Verifique \texttt{which python} y reinstale dentro de \texttt{.venv}. \\
-Error del complemento Qt/XCB & Falta una biblioteca de escritorio. & En Ubuntu o
-Debian instale \texttt{libxcb-cursor0}; revise el mensaje de Qt para dependencias
-adicionales de su distribución. \\
-No se abre una ventana & Sesión sin servidor gráfico o variable de pantalla no
-disponible. & Ejecute desde una sesión gráfica local compatible. \\
+El cálculo no se ejecuta & Existe al menos un error de validación. & Revise el
+diagnóstico, corrija todos los errores y vuelva a presionar F5. \\
+Los resultados no reflejan el último cambio & El proyecto fue modificado después
+del cálculo. & Ejecute nuevamente el cálculo antes de interpretar o exportar. \\
 Proyecto rechazado al abrir & JSON inválido, tipo de dato incorrecto o esquema más
-reciente. & No edite a ciegas; conserve una copia, valide el JSON y actualice HCNet
-si el mensaje indica versión futura. \\
-No se puede exportar \texttt{.tex} & Analista vacío o resultados no calculados. &
-Complete el analista y ejecute F5 antes de exportar. \\
+reciente. & Conserve una copia, valide el archivo y revise la versión que lo creó. \\
+No se puede exportar \texttt{.tex} & El analista está vacío o todavía no existen
+resultados calculados. & Complete el nombre del analista y ejecute F5. \\
+La memoria corresponde a otro grupo & La selección activa cambió en la tabla de
+resultados. & Seleccione el grupo que desea auditar y confirme su encabezado. \\
 \bottomrule
-\end{longtable}
-
-\section{Actualización del código}
-
-Antes de actualizar, guarde una copia de los proyectos. Desde el repositorio:
-
-\begin{lstlisting}
-cd ~/hcnet-transport
-git pull --ff-only
-source .venv/bin/activate
-python -m pip install -e ".[dev]"
-pytest
-\end{lstlisting}
-
-Revise \texttt{CHANGELOG.md} para identificar cambios de versión y posibles
-modificaciones de resultados.
+\end{tabularx}
+\end{table}
 
 % =============================================================================
 \appendix
@@ -1213,7 +1118,7 @@ modificaciones de resultados.
 
 \section{Atajos de teclado}
 
-\begin{tabularx}{\textwidth}{@{}p{4.0cm}Y@{}}
+\begin{tabularx}{\textwidth}{@{}L{4.0cm}Y@{}}
 \toprule
 \rowcolor{hcPale}
 \textbf{Atajo} & \textbf{Acción} \\
@@ -1231,7 +1136,7 @@ Ctrl+Q & Salir \\
 
 \section{Archivos producidos}
 
-\begin{tabularx}{\textwidth}{@{}p{4.0cm}Y@{}}
+\begin{tabularx}{\textwidth}{@{}L{4.0cm}Y@{}}
 \toprule
 \rowcolor{hcPale}
 \textbf{Extensión} & \textbf{Contenido} \\
@@ -1251,7 +1156,7 @@ El archivo CSV contiene las siguientes 25 columnas, en este orden:
 \begingroup
 \scriptsize
 \renewcommand{\arraystretch}{0.92}
-\begin{tabular}{@{}r p{6.3cm} r p{6.0cm}@{}}
+\begin{tabular}{@{}r L{6.3cm} r L{6.0cm}@{}}
 \toprule
 \rowcolor{hcPale}
 \textbf{Núm.} & \textbf{Columna} & \textbf{Núm.} & \textbf{Columna} \\
@@ -1278,7 +1183,7 @@ El archivo CSV contiene las siguientes 25 columnas, en este orden:
 \chapter{Glosario de símbolos y términos}
 % =============================================================================
 
-\begin{longtable}{@{}p{2.5cm}p{4.2cm}p{7.3cm}@{}}
+\begin{longtable}{@{}C{2.5cm}L{4.2cm}L{7.3cm}@{}}
 \caption{Símbolos principales.}\label{tab:simbolos}\\
 \toprule
 \rowcolor{hcPale}
@@ -1314,22 +1219,22 @@ $I$ & - & Factor de filtrado aguas arriba. \\
 \section*{Términos}
 
 \textbf{Capacidad.} Tasa máxima de servicio estimada para el grupo bajo las
-condiciones representadas.\index{capacidad}
+condiciones representadas.
 
 \textbf{Demanda residual.} Exceso diagnóstico de demanda durante $T$ cuando
-$v>c$; no equivale a cola percentil 95.\index{demanda residual}
+$v>c$; no equivale a cola percentil 95.
 
 \textbf{Demora de control.} Incremento de tiempo asociado con la operación del
-control, expresado por vehículo.\index{demora de control}
+control, expresado por vehículo.
 
 \textbf{Grupo de carriles.} Unidad de análisis formada por carriles con operación
-suficientemente homogénea.\index{grupo de carriles}
+suficientemente homogénea.
 
 \textbf{Nivel de servicio.} Clasificación cualitativa A a F asociada en HCNet con
-la demora de control y, para grupos sobresaturados, con $X>1$.\index{nivel de servicio}
+la demora de control y, para grupos sobresaturados, con $X>1$.
 
 \textbf{Proyecto.} Conjunto de identificación, parámetros comunes, grupos de
-carriles y notas almacenado por HCNet.\index{proyecto}
+carriles y notas almacenado por HCNet.
 
 % =============================================================================
 \clearpage
@@ -1354,10 +1259,5 @@ archivo de citación. Versión \softwareVersion.
 \url{\repositoryURL}.
 
 \end{thebibliography}
-
-\clearpage
-\phantomsection
-\addcontentsline{toc}{chapter}{Índice alfabético}
-\printindex
 
 \end{document}
