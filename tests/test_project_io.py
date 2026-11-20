@@ -11,12 +11,15 @@ from hcnet.io.project import export_report_tex, export_results_csv, load_project
 
 def test_project_json_round_trip(tmp_path) -> None:
     project = demonstration_project()
+    project.public_transport.name = "Línea Universidad"
+    project.public_transport.scheduled_headway_min = 6.5
     path = tmp_path / "demo.hcnet.json"
 
     save_project(project, path)
     restored = load_project(path)
 
     assert restored == project
+    assert restored.public_transport.name == "Línea Universidad"
     assert path.read_text(encoding="utf-8").endswith("\n")
 
 
@@ -46,11 +49,13 @@ def test_latex_report_contains_analyst_results_and_escaped_text(tmp_path) -> Non
 
     report = path.read_text(encoding="utf-8")
     assert report.startswith(r"\documentclass")
-    assert "HCNet Transport 2.0.0" in report
+    assert "HCNet Transport 3.1.0" in report
     assert r"Cruce Norte \& Sur\_1" in report
     assert r"Dra. Ana López \& equipo" in report
     assert r"\section{Resultados por grupo de carriles}" in report
     assert rf"\textbf{{Nivel de servicio}} & {result.level_of_service}" in report
+    assert r"\section{Transporte público}" in report
+    assert "Corredor Universidad" in report
     assert report.count(r"\subsection{") >= len(project.lane_groups)
 
 
@@ -60,7 +65,7 @@ def test_saved_project_records_current_application_version(tmp_path) -> None:
 
     save_project(project, path)
 
-    assert '"application_version": "2.0.0"' in path.read_text(encoding="utf-8")
+    assert '"application_version": "3.1.0"' in path.read_text(encoding="utf-8")
 
 
 def test_loader_accepts_project_payload_without_envelope(tmp_path) -> None:

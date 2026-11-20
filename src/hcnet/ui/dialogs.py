@@ -6,6 +6,7 @@ from dataclasses import replace
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -13,6 +14,9 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
     QScrollArea,
@@ -22,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from hcnet.domain.models import LaneGroupInput
+from hcnet.domain.models import IntersectionProject, LaneGroupInput, SignalHeadInput
 
 
 def _double_spin(
@@ -48,11 +52,13 @@ class LaneGroupDialog(QDialog):
         self,
         group: LaneGroupInput | None = None,
         cycle_length_s: float = 90.0,
+        project: IntersectionProject | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._source = group or LaneGroupInput()
         self._cycle_length_s = cycle_length_s
+        self._project = project or IntersectionProject(cycle_length_s=cycle_length_s)
         self.setWindowTitle("Grupo de carriles")
         self.setModal(True)
         self.resize(690, 650)
@@ -95,35 +101,48 @@ class LaneGroupDialog(QDialog):
         page = QWidget()
         layout = QVBoxLayout(page)
 
-        identity = QGroupBox("Identificación")
+        identity = QGroupBox("Origen, destino y carriles")
         identity_form = QFormLayout(identity)
-        self.approach = QComboBox()
-        self.approach.setEditable(True)
-        self.approach.addItems(["Norte", "Sur", "Oriente", "Poniente"])
-        self.movement = QComboBox()
-        self.movement.setEditable(True)
-        self.movement.addItems(
-            ["Izquierda", "Directo", "Derecha", "Directo + derecha", "Compartido"]
-        )
-        identity_form.addRow("Acceso:", self.approach)
-        identity_form.addRow("Movimiento:", self.movement)
+        self.origin = QComboBox()
+        for branch in self._project.active_branches:
+            self.origin.addItem(branch.label, branch.code)
+        self.destinations = QListWidget()
+        self.destinations.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+        self.destinations.setMaximumHeight(92)
+        self.lane_indices = QListWidget()
+        self.lane_indices.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+        self.lane_indices.setMaximumHeight(92)
+        self.phase = QSpinBox()
+        self.phase.setRange(1, 16)
+        identity_form.addRow("Ramal de origen:", self.origin)
+        identity_form.addRow("Ramal(es) de destino:", self.destinations)
+        identity_form.addRow("Carril(es) de entrada:", self.lane_indices)
+        identity_form.addRow("Fase semafórica:", self.phase)
+        self.origin.currentIndexChanged.connect(self._refresh_route_options)
         layout.addWidget(identity)
 
         demand_box = QGroupBox("Demanda y señal")
         demand_form = QFormLayout(demand_box)
         self.volume = _double_spin(0, 20000, 1, 10, " veh/h")
-        self.lanes = QSpinBox()
-        self.lanes.setRange(1, 12)
         self.green = _double_spin(0.1, 600, 1, 1, " s")
         self.green.setToolTip(
             f"Debe ser menor que la longitud de ciclo actual ({self._cycle_length_s:.1f} s)."
         )
         self.phf = _double_spin(0.01, 1.0, 3, 0.01)
         demand_form.addRow("Volumen observado, V:", self.volume)
-        demand_form.addRow("Número de carriles, N:", self.lanes)
         demand_form.addRow("Verde efectivo, g:", self.green)
         demand_form.addRow("FHMD / PHF:", self.phf)
         layout.addWidget(demand_box)
+
+        operation_box = QGroupBox("Recorrido y cola")
+        operation_form = QFormLayout(operation_box)
+        self.free_speed = _double_spin(1, 180, 1, 5, " km/h")
+        self.approach_length = _double_spin(1, 10000, 1, 10, " m")
+        self.vehicle_spacing = _double_spin(3, 20, 2, 0.5, " m/veh")
+        operation_form.addRow("Velocidad de flujo libre:", self.free_speed)
+        operation_form.addRow("Longitud de aproximación:", self.approach_length)
+        operation_form.addRow("Espaciamiento medio en cola:", self.vehicle_spacing)
+        layout.addWidget(operation_box)
 
         base_box = QGroupBox("Condiciones base")
         base_form = QFormLayout(base_box)
@@ -196,10 +215,13 @@ class LaneGroupDialog(QDialog):
         return page
 
     def _set_values(self, group: LaneGroupInput) -> None:
-        self.approach.setCurrentText(group.approach)
-        self.movement.setCurrentText(group.movement)
+        origin_index = self.origin.findData(group.origin_branch)
+        self.origin.setCurrentIndex(max(0, origin_index))
+        self._refresh_route_options()
+        _select_list_data(self.destinations, set(group.destination_branches))
+        _select_list_data(self.lane_indices, set(group.lane_indices))
+        self.phase.setValue(group.signal_phase)
         self.volume.setValue(group.volume_veh_h)
-        self.lanes.setValue(group.lanes)
         self.green.setValue(group.effective_green_s)
         self.phf.setValue(group.peak_hour_factor)
         self.s0.setValue(group.base_saturation_flow_pc_h_ln)
@@ -216,15 +238,58 @@ class LaneGroupDialog(QDialog):
         self.k_factor.setValue(group.incremental_delay_factor)
         self.i_factor.setValue(group.upstream_filtering_factor)
         self.d3.setValue(group.initial_queue_delay_s_veh)
+        self.free_speed.setValue(group.free_flow_speed_kmh)
+        self.approach_length.setValue(group.approach_length_m)
+        self.vehicle_spacing.setValue(group.average_vehicle_spacing_m)
         self.notes.setPlainText(group.notes)
 
+    def _refresh_route_options(self) -> None:
+        origin = self.origin.currentData()
+        selected_destinations = set(_selected_list_data(self.destinations))
+        selected_lanes = set(_selected_list_data(self.lane_indices))
+
+        self.destinations.clear()
+        for branch in self._project.active_branches:
+            if branch.code != origin:
+                item = QListWidgetItem(branch.label)
+                item.setData(Qt.ItemDataRole.UserRole, branch.code)
+                self.destinations.addItem(item)
+        _select_list_data(self.destinations, selected_destinations)
+
+        self.lane_indices.clear()
+        branch = self._project.branch(str(origin))
+        lane_count = branch.inbound_lanes if branch is not None else 1
+        for lane in range(1, lane_count + 1):
+            item = QListWidgetItem(f"Carril {lane}")
+            item.setData(Qt.ItemDataRole.UserRole, lane)
+            self.lane_indices.addItem(item)
+        _select_list_data(self.lane_indices, selected_lanes)
+
     def lane_group(self) -> LaneGroupInput:
+        origin = str(self.origin.currentData())
+        destinations = tuple(str(value) for value in _selected_list_data(self.destinations))
+        lanes = tuple(int(value) for value in _selected_list_data(self.lane_indices))
+        branch = self._project.branch(origin)
+        approach = (
+            self._source.approach
+            if origin == self._source.origin_branch
+            else branch.name if branch is not None else origin
+        )
+        movement = (
+            self._source.movement
+            if destinations == self._source.destination_branches
+            else f"{origin} → {'/'.join(destinations)}"
+        )
         return replace(
             self._source,
-            approach=self.approach.currentText().strip(),
-            movement=self.movement.currentText().strip(),
+            origin_branch=origin,
+            destination_branches=destinations,
+            lane_indices=lanes,
+            signal_phase=self.phase.value(),
+            approach=approach,
+            movement=movement,
             volume_veh_h=self.volume.value(),
-            lanes=self.lanes.value(),
+            lanes=len(lanes),
             effective_green_s=self.green.value(),
             peak_hour_factor=self.phf.value(),
             base_saturation_flow_pc_h_ln=self.s0.value(),
@@ -241,15 +306,18 @@ class LaneGroupDialog(QDialog):
             incremental_delay_factor=self.k_factor.value(),
             upstream_filtering_factor=self.i_factor.value(),
             initial_queue_delay_s_veh=self.d3.value(),
+            free_flow_speed_kmh=self.free_speed.value(),
+            approach_length_m=self.approach_length.value(),
+            average_vehicle_spacing_m=self.vehicle_spacing.value(),
             notes=self.notes.toPlainText().strip(),
         )
 
     def _accept_if_valid(self) -> None:
         problems = []
-        if not self.approach.currentText().strip():
-            problems.append("Escribe el nombre del acceso.")
-        if not self.movement.currentText().strip():
-            problems.append("Escribe el movimiento.")
+        if not _selected_list_data(self.destinations):
+            problems.append("Selecciona al menos un ramal de destino.")
+        if not _selected_list_data(self.lane_indices):
+            problems.append("Selecciona al menos un carril de entrada.")
         if self.green.value() >= self._cycle_length_s:
             problems.append(
                 f"El verde efectivo debe ser menor que el ciclo ({self._cycle_length_s:.1f} s)."
@@ -258,6 +326,113 @@ class LaneGroupDialog(QDialog):
             QMessageBox.warning(self, "Datos incompletos", "\n".join(problems))
             return
         self.accept()
+
+
+class SignalHeadDialog(QDialog):
+    """Configura ubicación, tipo, fase y movimientos de un semáforo."""
+
+    SIGNAL_TYPES = (
+        "Vehicular circular",
+        "Flecha direccional",
+        "Peatonal",
+        "Ciclista",
+        "Intermitente",
+    )
+
+    def __init__(
+        self,
+        project: IntersectionProject,
+        head: SignalHeadInput | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._project = project
+        self._source = head or SignalHeadInput(name=f"Semáforo {len(project.signal_heads) + 1}")
+        self.setWindowTitle("Configuración del semáforo")
+        self.resize(560, 520)
+
+        root = QVBoxLayout(self)
+        title = QLabel("Cabeza o grupo semafórico")
+        title.setObjectName("pageTitle")
+        root.addWidget(title)
+        description = QLabel(
+            "Indica dónde está instalado, qué indicación muestra y cuáles movimientos controla."
+        )
+        description.setObjectName("pageSubtitle")
+        description.setWordWrap(True)
+        root.addWidget(description)
+
+        box = QGroupBox("Datos del semáforo")
+        form = QFormLayout(box)
+        self.name = QLineEdit()
+        self.branch = QComboBox()
+        for branch in project.active_branches:
+            self.branch.addItem(branch.label, branch.code)
+        self.signal_type = QComboBox()
+        self.signal_type.addItems(self.SIGNAL_TYPES)
+        self.phase = QSpinBox()
+        self.phase.setRange(1, 16)
+        form.addRow("Nombre:", self.name)
+        form.addRow("Ubicación (ramal):", self.branch)
+        form.addRow("Tipo:", self.signal_type)
+        form.addRow("Fase:", self.phase)
+        root.addWidget(box)
+
+        movements_box = QGroupBox("Movimientos controlados")
+        movements_layout = QVBoxLayout(movements_box)
+        self.movements = QListWidget()
+        self.movements.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+        for group in project.lane_groups:
+            item = QListWidgetItem(group.label)
+            item.setData(Qt.ItemDataRole.UserRole, group.identifier)
+            self.movements.addItem(item)
+        movements_layout.addWidget(self.movements)
+        root.addWidget(movements_box, 1)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Guardar semáforo")
+        buttons.accepted.connect(self._accept_if_valid)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+        self.name.setText(self._source.name)
+        self.branch.setCurrentIndex(max(0, self.branch.findData(self._source.branch_code)))
+        self.signal_type.setCurrentText(self._source.signal_type)
+        self.phase.setValue(self._source.signal_phase)
+        _select_list_data(self.movements, set(self._source.controlled_group_ids))
+
+    def signal_head(self) -> SignalHeadInput:
+        return replace(
+            self._source,
+            name=self.name.text().strip(),
+            branch_code=str(self.branch.currentData()),
+            signal_type=self.signal_type.currentText(),
+            signal_phase=self.phase.value(),
+            controlled_group_ids=tuple(str(value) for value in _selected_list_data(self.movements)),
+        )
+
+    def _accept_if_valid(self) -> None:
+        problems = []
+        if not self.name.text().strip():
+            problems.append("Escribe un nombre para el semáforo.")
+        if not _selected_list_data(self.movements):
+            problems.append("Selecciona al menos un movimiento controlado.")
+        if problems:
+            QMessageBox.warning(self, "Datos incompletos", "\n".join(problems))
+            return
+        self.accept()
+
+
+def _selected_list_data(widget: QListWidget) -> list[object]:
+    return [item.data(Qt.ItemDataRole.UserRole) for item in widget.selectedItems()]
+
+
+def _select_list_data(widget: QListWidget, values: set[object]) -> None:
+    for index in range(widget.count()):
+        item = widget.item(index)
+        item.setSelected(item.data(Qt.ItemDataRole.UserRole) in values)
 
 
 def _scrollable(content: QWidget) -> QScrollArea:

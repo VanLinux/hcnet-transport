@@ -28,6 +28,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
+    QSpinBox,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -39,14 +41,30 @@ from PySide6.QtWidgets import (
 )
 
 from hcnet import __version__
-from hcnet.domain.calculations import CalculationError, calculate_intersection
-from hcnet.domain.models import IntersectionProject, IntersectionResult, LaneGroupInput
+from hcnet.domain.calculations import (
+    CalculationError,
+    calculate_intersection,
+    optimize_signal_timing,
+)
+from hcnet.domain.models import (
+    BranchInput,
+    IntersectionProject,
+    IntersectionResult,
+    LaneGroupInput,
+    SignalOptimizationResult,
+)
 from hcnet.domain.reporting import calculation_trace_html
 from hcnet.domain.sample import demonstration_project
+from hcnet.domain.transit import (
+    TransitCalculationError,
+    TransitLineResult,
+    calculate_transit_line,
+)
 from hcnet.io.project import export_report_tex, export_results_csv, load_project, save_project
-from hcnet.ui.charts import IntersectionSketch, SaturationChart
-from hcnet.ui.dialogs import LaneGroupDialog
+from hcnet.ui.charts import IntersectionSketch, SaturationChart, SignalTimingDiagram
+from hcnet.ui.dialogs import LaneGroupDialog, SignalHeadDialog
 from hcnet.ui.styles import COLORS, LOS_COLORS
+from hcnet.ui.transit_widget import PublicTransportTab
 
 
 class MetricCard(QFrame):
@@ -84,6 +102,8 @@ class MainWindow(QMainWindow):
         self.project = demonstration_project()
         self.current_path: Path | None = None
         self.last_result: IntersectionResult | None = None
+        self.last_optimization: SignalOptimizationResult | None = None
+        self.last_transit_result: TransitLineResult | None = None
         self.dirty = False
         self._loading = False
 
@@ -191,7 +211,7 @@ class MainWindow(QMainWindow):
         title = QLabel("HCNet Transport")
         title.setObjectName("pageTitle")
         subtitle = QLabel(
-            "Highway Capacity and Network Evaluation Tool · Intersecciones semaforizadas"
+            "Highway Capacity and Network Evaluation Tool · Intersecciones y transporte público"
         )
         subtitle.setObjectName("pageSubtitle")
         titles.addWidget(title)
@@ -210,14 +230,22 @@ class MainWindow(QMainWindow):
         self.tabs.setDocumentMode(True)
         self.scope_tab = self._build_scope_tab()
         self.project_tab = self._build_project_tab()
+        self.geometry_tab = self._build_geometry_tab()
         self.groups_tab = self._build_groups_tab()
+        self.signals_tab = self._build_signals_tab()
+        self.transit_tab = PublicTransportTab()
+        self.transit_tab.input_changed.connect(self._mark_dirty)
+        self.transit_tab.calculate_requested.connect(self.calculate_transit)
         self.results_tab = self._build_results_tab()
         self.trace_tab = self._build_trace_tab()
         self.tabs.addTab(self.scope_tab, "1  Inicio y alcance")
         self.tabs.addTab(self.project_tab, "2  Proyecto")
-        self.tabs.addTab(self.groups_tab, "3  Grupos de carriles")
-        self.tabs.addTab(self.results_tab, "4  Resultados")
-        self.tabs.addTab(self.trace_tab, "5  Reporte técnico")
+        self.tabs.addTab(self.geometry_tab, "3  Geometría")
+        self.tabs.addTab(self.groups_tab, "4  Movimientos y carriles")
+        self.tabs.addTab(self.signals_tab, "5  Semaforización")
+        self.tabs.addTab(self.transit_tab, "6  Transporte público")
+        self.tabs.addTab(self.results_tab, "7  Resultados intersección")
+        self.tabs.addTab(self.trace_tab, "8  Reporte técnico")
         root.addWidget(self.tabs, 1)
 
         self.setCentralWidget(central)
@@ -229,8 +257,9 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 12, 0, 0)
 
         banner = QLabel(
-            "Módulo actual: análisis educativo de una intersección semaforizada aislada "
-            "con control de tiempo fijo y periodo de demanda uniforme."
+            "Módulos actuales: intersección semaforizada aislada y planeación operacional "
+            "de una línea de transporte público. Cada módulo conserva validación y cálculo "
+            "independientes."
         )
         banner.setObjectName("infoBanner")
         banner.setWordWrap(True)
@@ -304,6 +333,130 @@ class MainWindow(QMainWindow):
         self.project_notes.textChanged.connect(self._mark_dirty)
         return page
 
+    def _build_geometry_tab(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 12, 0, 0)
+
+        header = QHBoxLayout()
+        title_box = QVBoxLayout()
+        title = QLabel("Geometría de la intersección")
+        title.setObjectName("sectionTitle")
+        subtitle = QLabel(
+            "Asigna una letra a cada ramal y define sus carriles de entrada y salida."
+        )
+        subtitle.setObjectName("pageSubtitle")
+        title_box.addWidget(title)
+        title_box.addWidget(subtitle)
+        header.addLayout(title_box)
+        header.addStretch()
+        self.branch_count_combo = QComboBox()
+        self.branch_count_combo.addItem("Tres ramales (A–C)", 3)
+        self.branch_count_combo.addItem("Cuatro ramales (A–D)", 4)
+        self.branch_count_combo.currentIndexChanged.connect(self._geometry_changed)
+        header.addWidget(QLabel("Tipo:"))
+        header.addWidget(self.branch_count_combo)
+        layout.addLayout(header)
+
+        note = QLabel(
+            "Convención: el usuario elige después los recorridos con pares origen–destino, "
+            "por ejemplo A → C. El número de carril se cuenta desde el borde izquierdo "
+            "del acceso en el sentido de circulación."
+        )
+        note.setObjectName("infoBanner")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+
+        self.geometry_table = QTableWidget(4, 5)
+        self.geometry_table.setHorizontalHeaderLabels(
+            ["Letra", "Nombre del ramal", "Ubicación", "Carriles de entrada", "Carriles de salida"]
+        )
+        self.geometry_table.verticalHeader().setVisible(False)
+        self.geometry_table.setAlternatingRowColors(True)
+        self.geometry_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.geometry_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        self.geometry_table.itemChanged.connect(self._geometry_changed)
+        layout.addWidget(self.geometry_table)
+
+        summary = QLabel(
+            "Los carriles de entrada delimitan las opciones disponibles al crear cada movimiento. "
+            "Si cambia la geometría, revise que los movimientos existentes sigan siendo válidos."
+        )
+        summary.setObjectName("pageSubtitle")
+        summary.setWordWrap(True)
+        layout.addWidget(summary)
+        layout.addStretch()
+        return page
+
+    def _populate_geometry_table(self) -> None:
+        self.geometry_table.blockSignals(True)
+        positions = ("Norte", "Oriente", "Sur", "Poniente")
+        for row, branch in enumerate(self.project.branches[:4]):
+            code_item = QTableWidgetItem(branch.code)
+            code_item.setFlags(code_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            code_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.geometry_table.setItem(row, 0, code_item)
+            self.geometry_table.setItem(row, 1, QTableWidgetItem(branch.name))
+            position_item = QTableWidgetItem(branch.position or positions[row])
+            position_item.setFlags(position_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            position_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.geometry_table.setItem(row, 2, position_item)
+            inbound = QSpinBox()
+            inbound.setRange(1, 12)
+            inbound.setValue(branch.inbound_lanes)
+            inbound.valueChanged.connect(self._geometry_changed)
+            outbound = QSpinBox()
+            outbound.setRange(1, 12)
+            outbound.setValue(branch.outbound_lanes)
+            outbound.valueChanged.connect(self._geometry_changed)
+            self.geometry_table.setCellWidget(row, 3, inbound)
+            self.geometry_table.setCellWidget(row, 4, outbound)
+        self.geometry_table.blockSignals(False)
+        self._update_geometry_visibility()
+
+    def _update_geometry_visibility(self) -> None:
+        count = int(self.branch_count_combo.currentData() or 4)
+        for row in range(4):
+            self.geometry_table.setRowHidden(row, row >= count)
+
+    def _geometry_changed(self, *_args) -> None:
+        if self._loading:
+            return
+        self._update_geometry_visibility()
+        self._update_project_geometry_from_ui()
+        self._refresh_input_table()
+        self._refresh_signal_table()
+        self._mark_dirty()
+
+    def _update_project_geometry_from_ui(self) -> None:
+        if not hasattr(self, "geometry_table"):
+            return
+        branches: list[BranchInput] = []
+        for row in range(4):
+            code_item = self.geometry_table.item(row, 0)
+            name_item = self.geometry_table.item(row, 1)
+            position_item = self.geometry_table.item(row, 2)
+            inbound = self.geometry_table.cellWidget(row, 3)
+            outbound = self.geometry_table.cellWidget(row, 4)
+            if code_item is None or name_item is None or position_item is None:
+                continue
+            branches.append(
+                BranchInput(
+                    code=code_item.text().strip(),
+                    name=name_item.text().strip(),
+                    position=position_item.text().strip(),
+                    inbound_lanes=inbound.value(),
+                    outbound_lanes=outbound.value(),
+                )
+            )
+        if len(branches) == 4:
+            self.project.branches = branches
+        self.project.branch_count = int(self.branch_count_combo.currentData() or 4)
+
     def _build_groups_tab(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
@@ -311,10 +464,10 @@ class MainWindow(QMainWindow):
 
         heading = QHBoxLayout()
         title_box = QVBoxLayout()
-        title = QLabel("Grupos de carriles")
+        title = QLabel("Movimientos y asignación de carriles")
         title.setObjectName("sectionTitle")
         subtitle = QLabel(
-            "Cada fila representa movimientos que comparten carriles y condiciones operacionales."
+            "Cada fila indica de qué ramal parte el flujo, a cuál llega y qué carriles utiliza."
         )
         subtitle.setObjectName("pageSubtitle")
         title_box.addWidget(title)
@@ -336,16 +489,18 @@ class MainWindow(QMainWindow):
             heading.addWidget(button)
         layout.addLayout(heading)
 
-        self.input_table = QTableWidget(0, 9)
+        self.input_table = QTableWidget(0, 11)
         self.input_table.setHorizontalHeaderLabels(
             [
-                "Acceso",
-                "Movimiento",
-                "V (veh/h)",
+                "Origen → destino",
                 "Carriles",
+                "Fase",
+                "V (veh/h)",
                 "g (s)",
                 "FHMD",
                 "s₀",
+                "VFL (km/h)",
+                "Longitud (m)",
                 "Pesados",
                 "Observaciones",
             ]
@@ -358,8 +513,8 @@ class MainWindow(QMainWindow):
         self.input_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.ResizeToContents
         )
-        self.input_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.input_table.horizontalHeader().setSectionResizeMode(8, QHeaderView.ResizeMode.Stretch)
+        self.input_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.input_table.horizontalHeader().setSectionResizeMode(10, QHeaderView.ResizeMode.Stretch)
         self.input_table.doubleClicked.connect(self.edit_selected_group)
         layout.addWidget(self.input_table, 1)
 
@@ -376,6 +531,128 @@ class MainWindow(QMainWindow):
         footer.addWidget(down_button)
         layout.addLayout(footer)
         return page
+
+    def _build_signals_tab(self) -> QWidget:
+        outer = QWidget()
+        outer_layout = QVBoxLayout(outer)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 12, 0, 0)
+
+        top = QHBoxLayout()
+        title_box = QVBoxLayout()
+        title = QLabel("Configuración y optimización semafórica")
+        title.setObjectName("sectionTitle")
+        subtitle = QLabel(
+            "Ubica cada semáforo, asigna los movimientos que controla y optimiza el ciclo."
+        )
+        subtitle.setObjectName("pageSubtitle")
+        title_box.addWidget(title)
+        title_box.addWidget(subtitle)
+        top.addLayout(title_box)
+        top.addStretch()
+        optimize_button = QPushButton("Optimizar y aplicar")
+        optimize_button.setObjectName("primaryButton")
+        optimize_button.clicked.connect(self.optimize_signal_plan)
+        top.addWidget(optimize_button)
+        layout.addLayout(top)
+
+        configuration = QGroupBox("Método y restricciones")
+        config_layout = QGridLayout(configuration)
+        self.optimization_method_combo = QComboBox()
+        self.optimization_method_combo.addItem("Webster · ciclo y reparto de verdes", "Webster")
+        self.signal_lost_spin = QDoubleSpinBox()
+        self.signal_lost_spin.setRange(0.1, 30)
+        self.signal_lost_spin.setDecimals(1)
+        self.signal_lost_spin.setSuffix(" s/fase")
+        self.minimum_green_spin = QDoubleSpinBox()
+        self.minimum_green_spin.setRange(1, 120)
+        self.minimum_green_spin.setDecimals(1)
+        self.minimum_green_spin.setSuffix(" s")
+        self.yellow_spin = QDoubleSpinBox()
+        self.yellow_spin.setRange(0, 15)
+        self.yellow_spin.setDecimals(1)
+        self.yellow_spin.setSuffix(" s")
+        self.all_red_spin = QDoubleSpinBox()
+        self.all_red_spin.setRange(0, 15)
+        self.all_red_spin.setDecimals(1)
+        self.all_red_spin.setSuffix(" s")
+        config_layout.addWidget(QLabel("Método:"), 0, 0)
+        config_layout.addWidget(self.optimization_method_combo, 0, 1)
+        config_layout.addWidget(QLabel("Tiempo perdido:"), 0, 2)
+        config_layout.addWidget(self.signal_lost_spin, 0, 3)
+        config_layout.addWidget(QLabel("Verde mínimo:"), 1, 0)
+        config_layout.addWidget(self.minimum_green_spin, 1, 1)
+        config_layout.addWidget(QLabel("Amarillo:"), 1, 2)
+        config_layout.addWidget(self.yellow_spin, 1, 3)
+        config_layout.addWidget(QLabel("Todo rojo:"), 1, 4)
+        config_layout.addWidget(self.all_red_spin, 1, 5)
+        for widget in (
+            self.optimization_method_combo,
+            self.signal_lost_spin,
+            self.minimum_green_spin,
+            self.yellow_spin,
+            self.all_red_spin,
+        ):
+            if isinstance(widget, QComboBox):
+                widget.currentIndexChanged.connect(self._mark_dirty)
+            else:
+                widget.valueChanged.connect(self._mark_dirty)
+        layout.addWidget(configuration)
+
+        heads_box = QGroupBox("Semáforos instalados")
+        heads_layout = QVBoxLayout(heads_box)
+        buttons = QHBoxLayout()
+        add_button = QPushButton("Agregar semáforo")
+        add_button.clicked.connect(self.add_signal_head)
+        edit_button = QPushButton("Editar")
+        edit_button.clicked.connect(self.edit_selected_signal_head)
+        delete_button = QPushButton("Eliminar")
+        delete_button.setObjectName("dangerButton")
+        delete_button.clicked.connect(self.delete_selected_signal_head)
+        buttons.addWidget(add_button)
+        buttons.addWidget(edit_button)
+        buttons.addWidget(delete_button)
+        buttons.addStretch()
+        self.signal_count_label = QLabel()
+        self.signal_count_label.setObjectName("pageSubtitle")
+        buttons.addWidget(self.signal_count_label)
+        heads_layout.addLayout(buttons)
+        self.signal_table = QTableWidget(0, 5)
+        self.signal_table.setHorizontalHeaderLabels(
+            ["Semáforo", "Ramal", "Tipo", "Fase", "Movimientos controlados"]
+        )
+        self.signal_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.signal_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.signal_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.signal_table.setMinimumHeight(245)
+        self.signal_table.verticalHeader().setVisible(False)
+        self.signal_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.signal_table.horizontalHeader().setSectionResizeMode(
+            4, QHeaderView.ResizeMode.Stretch
+        )
+        self.signal_table.doubleClicked.connect(self.edit_selected_signal_head)
+        heads_layout.addWidget(self.signal_table)
+        layout.addWidget(heads_box)
+
+        diagram_box = QGroupBox("Diagrama de bandas del ciclo optimizado")
+        diagram_layout = QVBoxLayout(diagram_box)
+        self.optimization_summary = QLabel("Sin optimización calculada.")
+        self.optimization_summary.setObjectName("pageSubtitle")
+        self.optimization_summary.setWordWrap(True)
+        diagram_layout.addWidget(self.optimization_summary)
+        self.timing_diagram = SignalTimingDiagram()
+        diagram_layout.addWidget(self.timing_diagram)
+        layout.addWidget(diagram_box)
+        scroll.setWidget(page)
+        outer_layout.addWidget(scroll)
+        return outer
 
     def _build_results_tab(self) -> QWidget:
         page = QWidget()
@@ -404,10 +681,14 @@ class MainWindow(QMainWindow):
         self.delay_card = MetricCard("DEMORA PONDERADA")
         self.x_card = MetricCard("GRADO DE SATURACIÓN CRÍTICO")
         self.volume_card = MetricCard("VOLUMEN DE ENTRADA")
+        self.queue_card = MetricCard("COLA P95 MÁXIMA")
+        self.travel_time_card = MetricCard("TIEMPO DE VIAJE PONDERADO")
         cards.addWidget(self.los_card, 0, 0)
         cards.addWidget(self.delay_card, 0, 1)
         cards.addWidget(self.x_card, 0, 2)
         cards.addWidget(self.volume_card, 0, 3)
+        cards.addWidget(self.queue_card, 1, 0, 1, 2)
+        cards.addWidget(self.travel_time_card, 1, 2, 1, 2)
         layout.addLayout(cards)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
@@ -418,9 +699,25 @@ class MainWindow(QMainWindow):
         splitter.addWidget(chart_box)
 
         lower = QSplitter(Qt.Orientation.Horizontal)
-        self.results_table = QTableWidget(0, 11)
+        self.results_table = QTableWidget(0, 15)
         self.results_table.setHorizontalHeaderLabels(
-            ["Grupo", "v", "s", "c", "X", "d₁", "d₂", "d₃", "d", "LOS", "Residual"]
+            [
+                "Movimiento",
+                "Fase",
+                "v",
+                "s",
+                "c",
+                "X",
+                "d",
+                "LOS",
+                "Cola media",
+                "Cola P95",
+                "P95 (m)",
+                "VFL",
+                "t₀",
+                "t viaje",
+                "Residual",
+            ]
         )
         self.results_table.setAlternatingRowColors(True)
         self.results_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -521,15 +818,20 @@ class MainWindow(QMainWindow):
                 github.com/VanLinux/hcnet-transport</a></td></tr>
             </table>
 
-            <div class="scope"><b>Alcance implementado:</b> análisis de una intersección
-            semaforizada aislada mediante grupos de carriles, control de tiempo fijo,
-            factores de ajuste del flujo de saturación, capacidad, grado de saturación
-            X, demora d₁+d₂+d₃ y nivel de servicio A–F.</div>
+            <div class="scope"><b>Alcance implementado:</b> intersecciones aisladas de
+            tres o cuatro ramales; movimientos A–D por carril y fase; capacidad, grado
+            de saturación X, demora d₁+d₂+d₃, nivel de servicio A–F, colas diagnósticas,
+            tiempo de viaje y optimización semafórica Webster. Incluye además planeación
+            de una línea de transporte público: velocidades, ciclo, flota, frecuencia,
+            capacidad, paradas, acceso, intercambio de pasajeros y comparación de
+            funciones volumen–demora.</div>
 
             <h3>Flujo de trabajo</h3>
             <ol>
               <li>Identifica el estudio y captura el nombre del analista.</li>
-              <li>Configura los grupos de carriles y sus condiciones operacionales.</li>
+              <li>Define ramales, carriles y recorridos origen–destino.</li>
+              <li>Configura semáforos y optimiza el plan de tiempo fijo.</li>
+              <li>Dimensiona la línea de transporte público y compara la congestión.</li>
               <li>Calcula y revisa el diagnóstico de la intersección.</li>
               <li>Examina la memoria matemática y exporta resultados CSV o el reporte
               técnico completo en LaTeX.</li>
@@ -542,14 +844,18 @@ class MainWindow(QMainWindow):
               <li>Los factores fLU, fa, fturn, PF, k e I proceden del estudio
               o de una fuente autorizada.</li>
               <li>d₃ se introduce directamente cuando existe una cola inicial.</li>
+              <li>La demanda de transporte público es direccional y estacionaria; los
+              ascensos y descensos capturados representan la parada crítica media.</li>
             </ul>
             <h3>No incluido todavía</h3>
             <ul>
-              <li>Asignación automática de carriles compartidos y giros permitidos.</li>
-              <li>Estimación interna de cola inicial o cola percentil 95.</li>
-              <li>Coordinación de corredores, fases actuadas, bicicletas y peatones.</li>
+              <li>Detección automática de conflictos entre movimientos.</li>
+              <li>Cola percentil 95 certificada por HCM/HCS.</li>
+              <li>Coordinación de corredores, control actuado y mínimos peatonales.</li>
               <li>Glorietas, intersecciones no semaforizadas, autopistas y carreteras.</li>
               <li>Calibración automática para condiciones mexicanas.</li>
+              <li>Asignación de red, matrices OD, transbordos, tarifas y uso de suelo
+              propios de modelos estratégicos como TRANUS.</li>
             </ul>
 
             <div class="panel"><b>Uso responsable:</b> es una herramienta educativa
@@ -562,6 +868,7 @@ class MainWindow(QMainWindow):
         return page
 
     def _project_from_ui(self) -> IntersectionProject:
+        self._update_project_geometry_from_ui()
         return replace(
             self.project,
             name=self.name_edit.text().strip(),
@@ -570,6 +877,13 @@ class MainWindow(QMainWindow):
             study_date=self.date_edit.date().toString("yyyy-MM-dd"),
             cycle_length_s=self.cycle_spin.value(),
             analysis_period_h=self.period_spin.value(),
+            branch_count=int(self.branch_count_combo.currentData() or 4),
+            optimization_method=str(self.optimization_method_combo.currentData() or "Webster"),
+            signal_lost_time_s=self.signal_lost_spin.value(),
+            minimum_green_s=self.minimum_green_spin.value(),
+            yellow_time_s=self.yellow_spin.value(),
+            all_red_time_s=self.all_red_spin.value(),
+            public_transport=self.transit_tab.input_data(),
             notes=self.project_notes.toPlainText().strip(),
         )
 
@@ -584,7 +898,20 @@ class MainWindow(QMainWindow):
         self.cycle_spin.setValue(project.cycle_length_s)
         self.period_spin.setValue(project.analysis_period_h)
         self.project_notes.setPlainText(project.notes)
+        self.branch_count_combo.setCurrentIndex(
+            max(0, self.branch_count_combo.findData(project.branch_count))
+        )
+        self._populate_geometry_table()
+        self.optimization_method_combo.setCurrentIndex(
+            max(0, self.optimization_method_combo.findData(project.optimization_method))
+        )
+        self.signal_lost_spin.setValue(project.signal_lost_time_s)
+        self.minimum_green_spin.setValue(project.minimum_green_s)
+        self.yellow_spin.setValue(project.yellow_time_s)
+        self.all_red_spin.setValue(project.all_red_time_s)
+        self.transit_tab.set_input(project.public_transport)
         self._refresh_input_table()
+        self._refresh_signal_table()
         self.sketch.set_project(project)
         self._clear_results()
         self._loading = False
@@ -596,19 +923,21 @@ class MainWindow(QMainWindow):
         table.setRowCount(len(self.project.lane_groups))
         for row, group in enumerate(self.project.lane_groups):
             values = [
-                group.approach,
-                group.movement,
+                f"{group.origin_branch} → {'/'.join(group.destination_branches)}",
+                ", ".join(str(item) for item in group.lane_indices),
+                str(group.signal_phase),
                 f"{group.volume_veh_h:,.1f}",
-                str(group.lanes),
                 f"{group.effective_green_s:.1f}",
                 f"{group.peak_hour_factor:.3f}",
                 f"{group.base_saturation_flow_pc_h_ln:,.0f}",
+                f"{group.free_flow_speed_kmh:.1f}",
+                f"{group.approach_length_m:.1f}",
                 f"{group.heavy_vehicles_percent:.1f} %",
                 group.notes,
             ]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                if column in {2, 3, 4, 5, 6, 7}:
+                if column in {1, 2, 3, 4, 5, 6, 7, 8, 9}:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 table.setItem(row, column, item)
         total = sum(group.volume_veh_h for group in self.project.lane_groups)
@@ -626,8 +955,10 @@ class MainWindow(QMainWindow):
         return selection[0].row() if selection else None
 
     def add_group(self) -> None:
+        self.project = self._project_from_ui()
         dialog = LaneGroupDialog(
             cycle_length_s=self.cycle_spin.value(),
+            project=self.project,
             parent=self,
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -642,9 +973,11 @@ class MainWindow(QMainWindow):
                 self, "Selecciona un grupo", "Selecciona la fila que deseas editar."
             )
             return
+        self.project = self._project_from_ui()
         dialog = LaneGroupDialog(
             self.project.lane_groups[index],
             cycle_length_s=self.cycle_spin.value(),
+            project=self.project,
             parent=self,
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -685,8 +1018,14 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.No,
         )
         if answer == QMessageBox.StandardButton.Yes:
+            removed_id = self.project.lane_groups[index].identifier
             del self.project.lane_groups[index]
+            for head in self.project.signal_heads:
+                head.controlled_group_ids = tuple(
+                    item for item in head.controlled_group_ids if item != removed_id
+                )
             self._refresh_input_table(min(index, len(self.project.lane_groups) - 1))
+            self._refresh_signal_table()
             self._mark_dirty()
 
     def move_selected_group(self, offset: int) -> None:
@@ -700,6 +1039,124 @@ class MainWindow(QMainWindow):
         groups[index], groups[destination] = groups[destination], groups[index]
         self._refresh_input_table(destination)
         self._mark_dirty()
+
+    def _refresh_signal_table(self, selected_row: int | None = None) -> None:
+        if not hasattr(self, "signal_table"):
+            return
+        groups = {group.identifier: group.label for group in self.project.lane_groups}
+        self.signal_table.setRowCount(len(self.project.signal_heads))
+        for row, head in enumerate(self.project.signal_heads):
+            movement_labels = [
+                groups[identifier]
+                for identifier in head.controlled_group_ids
+                if identifier in groups
+            ]
+            values = [
+                head.name,
+                head.branch_code,
+                head.signal_type,
+                str(head.signal_phase),
+                "; ".join(movement_labels) or "Sin movimientos",
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if column in {1, 3}:
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.signal_table.setItem(row, column, item)
+        self.signal_count_label.setText(
+            f"{len(self.project.signal_heads)} semáforo"
+            f"{'s' if len(self.project.signal_heads) != 1 else ''} configurado"
+            f"{'s' if len(self.project.signal_heads) != 1 else ''}"
+        )
+        if selected_row is not None and 0 <= selected_row < self.signal_table.rowCount():
+            self.signal_table.selectRow(selected_row)
+
+    def selected_signal_head_index(self) -> int | None:
+        selection = self.signal_table.selectionModel().selectedRows()
+        return selection[0].row() if selection else None
+
+    def add_signal_head(self) -> None:
+        self.project = self._project_from_ui()
+        if not self.project.lane_groups:
+            QMessageBox.information(
+                self,
+                "Primero crea movimientos",
+                "Agrega al menos un movimiento antes de configurar sus semáforos.",
+            )
+            self.tabs.setCurrentWidget(self.groups_tab)
+            return
+        dialog = SignalHeadDialog(self.project, parent=self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.project.signal_heads.append(dialog.signal_head())
+            self._refresh_signal_table(len(self.project.signal_heads) - 1)
+            self._mark_dirty()
+
+    def edit_selected_signal_head(self, *_args) -> None:
+        index = self.selected_signal_head_index()
+        if index is None:
+            QMessageBox.information(
+                self, "Selecciona un semáforo", "Selecciona la fila que deseas editar."
+            )
+            return
+        self.project = self._project_from_ui()
+        dialog = SignalHeadDialog(self.project, self.project.signal_heads[index], parent=self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.project.signal_heads[index] = dialog.signal_head()
+            self._refresh_signal_table(index)
+            self._mark_dirty()
+
+    def delete_selected_signal_head(self) -> None:
+        index = self.selected_signal_head_index()
+        if index is None:
+            QMessageBox.information(
+                self, "Selecciona un semáforo", "Selecciona la fila que deseas eliminar."
+            )
+            return
+        head = self.project.signal_heads[index]
+        answer = QMessageBox.question(
+            self,
+            "Eliminar semáforo",
+            f"¿Eliminar {head.name}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            del self.project.signal_heads[index]
+            self._refresh_signal_table(min(index, len(self.project.signal_heads) - 1))
+            self._mark_dirty()
+
+    def optimize_signal_plan(self) -> None:
+        self.project = self._project_from_ui()
+        try:
+            optimization = optimize_signal_timing(self.project)
+        except CalculationError as exc:
+            QMessageBox.warning(
+                self,
+                "No es posible optimizar",
+                "Corrige los siguientes datos:\n\n• " + "\n• ".join(exc.messages),
+            )
+            return
+
+        green_by_phase = {phase.phase_number: phase.green_s for phase in optimization.phases}
+        for group in self.project.lane_groups:
+            group.effective_green_s = green_by_phase[group.signal_phase]
+        self.project.cycle_length_s = optimization.cycle_length_s
+        self.cycle_spin.setValue(optimization.cycle_length_s)
+        self.last_optimization = optimization
+        self._refresh_input_table()
+        self.timing_diagram.set_data(self.project, optimization)
+        phase_text = " · ".join(
+            f"F{phase.phase_number}: {phase.green_s:.1f} s verde"
+            for phase in optimization.phases
+        )
+        warning_text = " ".join(optimization.warnings)
+        self.optimization_summary.setText(
+            f"Método {optimization.method} · C = {optimization.cycle_length_s:.0f} s · "
+            f"Y = {optimization.total_critical_flow_ratio:.3f} · {phase_text}. {warning_text}"
+        )
+        self._mark_dirty()
+        self.calculate(switch_tab=False)
+        self.statusBar().showMessage("Plan semafórico optimizado y aplicado", 6000)
 
     def calculate(self, *_args, switch_tab: bool = True) -> bool:
         self.project = self._project_from_ui()
@@ -716,9 +1173,32 @@ class MainWindow(QMainWindow):
 
         self.last_result = result
         self._show_results(result)
+        self.calculate_transit(show_errors=False)
         if switch_tab:
             self.tabs.setCurrentWidget(self.results_tab)
         self.statusBar().showMessage("Cálculo completado correctamente", 5000)
+        return True
+
+    def calculate_transit(self, *_args, show_errors: bool = True) -> bool:
+        """Calcula el módulo de línea sin condicionar el análisis de intersección."""
+
+        self.project = self._project_from_ui()
+        data = self.project.public_transport
+        try:
+            result = calculate_transit_line(data)
+        except TransitCalculationError as exc:
+            if show_errors:
+                QMessageBox.warning(
+                    self,
+                    "No es posible calcular la línea",
+                    "Corrige los siguientes datos:\n\n• " + "\n• ".join(exc.messages),
+                )
+            self.statusBar().showMessage("Transporte público: datos inválidos", 6000)
+            return False
+
+        self.last_transit_result = result
+        self.transit_tab.set_result(data, result)
+        self.statusBar().showMessage("Línea de transporte público calculada", 5000)
         return True
 
     def _show_results(self, result: IntersectionResult) -> None:
@@ -744,20 +1224,30 @@ class MainWindow(QMainWindow):
         self.volume_card.set_metric(
             f"{result.total_entering_volume_veh_h:,.0f}", "veh/h observados"
         )
+        self.queue_card.set_metric(f"{result.maximum_queue_95_m:.1f}", "m · aproximación crítica")
+        self.travel_time_card.set_metric(
+            f"{result.weighted_travel_time_s:.1f}", "s · recorrido libre + demora"
+        )
 
         self.results_table.setRowCount(len(result.lane_groups))
+        groups_by_id = {group.identifier: group for group in self.project.lane_groups}
         for row_index, row in enumerate(result.lane_groups):
+            source = groups_by_id[row.identifier]
             values = [
                 row.label,
+                str(source.signal_phase),
                 f"{row.demand_flow_rate_veh_h:,.1f}",
                 f"{row.saturation_flow_veh_h:,.1f}",
                 f"{row.capacity_veh_h:,.1f}",
                 f"{row.degree_of_saturation:.3f}",
-                f"{row.uniform_delay_s_veh:.1f}",
-                f"{row.incremental_delay_s_veh:.1f}",
-                f"{row.initial_queue_delay_s_veh:.1f}",
                 f"{row.control_delay_s_veh:.1f}",
                 row.level_of_service,
+                f"{row.average_queue_veh:.1f}",
+                f"{row.queue_95_veh:.1f}",
+                f"{row.queue_95_m:.1f}",
+                f"{source.free_flow_speed_kmh:.1f}",
+                f"{row.free_flow_travel_time_s:.1f}",
+                f"{row.travel_time_s:.1f}",
                 f"{row.residual_demand_veh:.1f}",
             ]
             for column, value in enumerate(values):
@@ -766,7 +1256,7 @@ class MainWindow(QMainWindow):
                     Qt.AlignmentFlag.AlignVCenter
                     | (Qt.AlignmentFlag.AlignLeft if column == 0 else Qt.AlignmentFlag.AlignCenter)
                 )
-                if column == 9:
+                if column == 7:
                     item.setBackground(QColor(LOS_COLORS[row.level_of_service]))
                     item.setForeground(QColor("#FFFFFF"))
                     font = item.font()
@@ -790,6 +1280,7 @@ class MainWindow(QMainWindow):
 
     def _clear_results(self) -> None:
         self.last_result = None
+        self.last_transit_result = None
         if not hasattr(self, "results_table"):
             return
         self.result_timestamp.setText("Sin resultados")
@@ -797,6 +1288,8 @@ class MainWindow(QMainWindow):
         self.delay_card.set_metric("—")
         self.x_card.set_metric("—")
         self.volume_card.set_metric("—")
+        self.queue_card.set_metric("—")
+        self.travel_time_card.set_metric("—")
         self.results_table.setRowCount(0)
         self.warning_list.clear()
         self.saturation_chart.set_result(None)
@@ -804,6 +1297,12 @@ class MainWindow(QMainWindow):
         self.trace_browser.setHtml(
             "<p style='color:#657987'>Calcula el proyecto para generar la memoria.</p>"
         )
+        self.last_optimization = None
+        if hasattr(self, "timing_diagram"):
+            self.optimization_summary.setText("Sin optimización calculada.")
+            self.timing_diagram.set_data(self.project, None)
+        if hasattr(self, "transit_tab"):
+            self.transit_tab.clear_result()
 
     def refresh_trace(self, *_args) -> None:
         if self.last_result is None or self.trace_selector.count() == 0:

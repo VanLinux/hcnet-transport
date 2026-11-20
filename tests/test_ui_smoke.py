@@ -30,9 +30,23 @@ def test_main_window_calculates_demo_and_populates_views(app: QApplication) -> N
     assert "Flujo de demanda" in window.trace_browser.toPlainText()
     assert window.tabs.widget(0) is window.scope_tab
     assert window.tabs.tabText(0) == "1  Inicio y alcance"
-    assert window.tabs.tabText(4) == "5  Reporte técnico"
+    assert window.tabs.tabText(4) == "5  Semaforización"
+    assert window.tabs.tabText(5) == "6  Transporte público"
+    assert window.tabs.tabText(7) == "8  Reporte técnico"
     assert window.export_tex_action.shortcut().toString() == "Ctrl+Shift+E"
-    assert "2.0.0" in window.windowTitle()
+    assert "3.1.0" in window.windowTitle()
+    assert window.last_transit_result is not None
+    assert window.transit_tab.congestion_table.rowCount() == 4
+
+    window.transit_tab.headway.setValue(6.0)
+    assert window.calculate_transit()
+    assert window.last_transit_result.service_frequency_bus_h == pytest.approx(10.0)
+    assert "10.00 bus/h" in window.transit_tab.service_metric.value.text()
+
+    window.optimize_signal_plan()
+    assert window.last_optimization is not None
+    assert "Webster" in window.optimization_summary.text()
+    assert window.cycle_spin.value() == window.last_optimization.cycle_length_s
 
     window.dirty = False
     window.close()

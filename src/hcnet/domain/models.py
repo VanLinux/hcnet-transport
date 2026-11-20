@@ -1,4 +1,4 @@
-"""Entidades de dominio para una intersección semaforizada aislada."""
+"""Entidades persistentes del proyecto HCNet Transport."""
 
 from __future__ import annotations
 
@@ -8,8 +8,9 @@ from typing import Any
 from uuid import uuid4
 
 from hcnet import __version__
+from hcnet.domain.transit import TransitLineInput
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 
 
 def _identifier() -> str:
@@ -26,6 +27,10 @@ class LaneGroupInput:
     """
 
     identifier: str = field(default_factory=_identifier)
+    origin_branch: str = "A"
+    destination_branches: tuple[str, ...] = ("C",)
+    lane_indices: tuple[int, ...] = (1,)
+    signal_phase: int = 1
     approach: str = "Norte"
     movement: str = "Directo"
     volume_veh_h: float = 450.0
@@ -46,11 +51,58 @@ class LaneGroupInput:
     incremental_delay_factor: float = 0.5
     upstream_filtering_factor: float = 1.0
     initial_queue_delay_s_veh: float = 0.0
+    free_flow_speed_kmh: float = 40.0
+    approach_length_m: float = 150.0
+    average_vehicle_spacing_m: float = 7.5
     notes: str = ""
+
+    def __post_init__(self) -> None:
+        if self.lanes > 1 and self.lane_indices == (1,):
+            self.lane_indices = tuple(range(1, self.lanes + 1))
 
     @property
     def label(self) -> str:
-        return f"{self.approach} · {self.movement}"
+        destinations = "/".join(self.destination_branches)
+        route = f"{self.origin_branch} → {destinations}" if destinations else self.movement
+        return f"{route} · carril{'es' if len(self.lane_indices) != 1 else ''} " + ", ".join(
+            str(item) for item in self.lane_indices
+        )
+
+
+@dataclass(slots=True)
+class BranchInput:
+    """Geometría básica de un ramal de la intersección."""
+
+    code: str
+    name: str
+    position: str
+    inbound_lanes: int = 2
+    outbound_lanes: int = 2
+
+    @property
+    def label(self) -> str:
+        return f"{self.code} · {self.name}"
+
+
+def default_branches() -> list[BranchInput]:
+    return [
+        BranchInput("A", "Norte", "Norte", 3, 3),
+        BranchInput("B", "Oriente", "Oriente", 3, 3),
+        BranchInput("C", "Sur", "Sur", 3, 3),
+        BranchInput("D", "Poniente", "Poniente", 3, 3),
+    ]
+
+
+@dataclass(slots=True)
+class SignalHeadInput:
+    """Cabeza o grupo semafórico instalado en un ramal."""
+
+    identifier: str = field(default_factory=_identifier)
+    name: str = "Semáforo 1"
+    branch_code: str = "A"
+    signal_type: str = "Vehicular circular"
+    signal_phase: int = 1
+    controlled_group_ids: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)
@@ -63,8 +115,24 @@ class IntersectionProject:
     study_date: str = field(default_factory=lambda: date.today().isoformat())
     cycle_length_s: float = 90.0
     analysis_period_h: float = 0.25
+    branch_count: int = 4
+    branches: list[BranchInput] = field(default_factory=default_branches)
     lane_groups: list[LaneGroupInput] = field(default_factory=list)
+    signal_heads: list[SignalHeadInput] = field(default_factory=list)
+    optimization_method: str = "Webster"
+    signal_lost_time_s: float = 4.0
+    minimum_green_s: float = 10.0
+    yellow_time_s: float = 3.0
+    all_red_time_s: float = 1.0
+    public_transport: TransitLineInput = field(default_factory=TransitLineInput)
     notes: str = ""
+
+    @property
+    def active_branches(self) -> list[BranchInput]:
+        return self.branches[: self.branch_count]
+
+    def branch(self, code: str) -> BranchInput | None:
+        return next((branch for branch in self.active_branches if branch.code == code), None)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -93,16 +161,39 @@ class IntersectionProject:
 
         data = dict(project_data)
         raw_groups = data.pop("lane_groups", [])
+        raw_branches = data.pop("branches", None)
+        raw_heads = data.pop("signal_heads", [])
+        raw_public_transport = data.pop("public_transport", None)
         if not isinstance(raw_groups, list):
             raise ValueError("'lane_groups' debe ser una lista.")
+        if raw_branches is not None and not isinstance(raw_branches, list):
+            raise ValueError("'branches' debe ser una lista.")
+        if not isinstance(raw_heads, list):
+            raise ValueError("'signal_heads' debe ser una lista.")
 
         allowed_project = set(cls.__dataclass_fields__)
         clean_project = {key: value for key, value in data.items() if key in allowed_project}
         _convert_values(
             clean_project,
-            strings=("name", "location", "analyst", "study_date", "notes"),
-            floats=("cycle_length_s", "analysis_period_h"),
+            strings=(
+                "name",
+                "location",
+                "analyst",
+                "study_date",
+                "optimization_method",
+                "notes",
+            ),
+            integers=("branch_count",),
+            floats=(
+                "cycle_length_s",
+                "analysis_period_h",
+                "signal_lost_time_s",
+                "minimum_green_s",
+                "yellow_time_s",
+                "all_red_time_s",
+            ),
         )
+        branches = _parse_branches(raw_branches)
         allowed_group = set(LaneGroupInput.__dataclass_fields__)
         groups = []
         for raw_group in raw_groups:
@@ -111,8 +202,8 @@ class IntersectionProject:
             clean_group = {key: value for key, value in raw_group.items() if key in allowed_group}
             _convert_values(
                 clean_group,
-                strings=("identifier", "approach", "movement", "notes"),
-                integers=("lanes",),
+                strings=("identifier", "origin_branch", "approach", "movement", "notes"),
+                integers=("lanes", "signal_phase"),
                 floats=(
                     "volume_veh_h",
                     "effective_green_s",
@@ -131,11 +222,114 @@ class IntersectionProject:
                     "incremental_delay_factor",
                     "upstream_filtering_factor",
                     "initial_queue_delay_s_veh",
+                    "free_flow_speed_kmh",
+                    "approach_length_m",
+                    "average_vehicle_spacing_m",
                 ),
             )
+            lanes = int(clean_group.get("lanes", 1))
+            origin = clean_group.get("origin_branch") or _legacy_origin(
+                str(clean_group.get("approach", "")), branches
+            )
+            clean_group["origin_branch"] = origin
+            if "destination_branches" in clean_group:
+                clean_group["destination_branches"] = tuple(
+                    str(value) for value in clean_group["destination_branches"]
+                )
+            else:
+                clean_group["destination_branches"] = _legacy_destinations(
+                    origin,
+                    str(clean_group.get("movement", "Directo")),
+                    [branch.code for branch in branches],
+                )
+            if "lane_indices" in clean_group:
+                clean_group["lane_indices"] = tuple(
+                    int(value) for value in clean_group["lane_indices"]
+                )
+            else:
+                clean_group["lane_indices"] = tuple(range(1, lanes + 1))
             groups.append(LaneGroupInput(**clean_group))
 
-        return cls(lane_groups=groups, **clean_project)
+        heads = _parse_signal_heads(raw_heads)
+        public_transport = TransitLineInput.from_dict(raw_public_transport)
+        branch_count = int(clean_project.get("branch_count", 4))
+        return cls(
+            branches=branches,
+            lane_groups=groups,
+            signal_heads=heads,
+            public_transport=public_transport,
+            branch_count=branch_count,
+            **{key: value for key, value in clean_project.items() if key != "branch_count"},
+        )
+
+
+def _parse_branches(raw: list[dict[str, Any]] | None) -> list[BranchInput]:
+    if raw is None:
+        return default_branches()
+    branches: list[BranchInput] = []
+    allowed = set(BranchInput.__dataclass_fields__)
+    for item in raw:
+        if not isinstance(item, dict):
+            raise ValueError("Cada ramal debe ser un objeto.")
+        clean = {key: value for key, value in item.items() if key in allowed}
+        _convert_values(
+            clean,
+            strings=("code", "name", "position"),
+            integers=("inbound_lanes", "outbound_lanes"),
+        )
+        branches.append(BranchInput(**clean))
+    defaults = default_branches()
+    for fallback in defaults:
+        if not any(item.code == fallback.code for item in branches):
+            branches.append(fallback)
+    return sorted(branches, key=lambda item: item.code)[:4]
+
+
+def _parse_signal_heads(raw: list[dict[str, Any]]) -> list[SignalHeadInput]:
+    heads: list[SignalHeadInput] = []
+    allowed = set(SignalHeadInput.__dataclass_fields__)
+    for item in raw:
+        if not isinstance(item, dict):
+            raise ValueError("Cada semáforo debe ser un objeto.")
+        clean = {key: value for key, value in item.items() if key in allowed}
+        _convert_values(
+            clean,
+            strings=("identifier", "name", "branch_code", "signal_type"),
+            integers=("signal_phase",),
+        )
+        if "controlled_group_ids" in clean:
+            clean["controlled_group_ids"] = tuple(
+                str(value) for value in clean["controlled_group_ids"]
+            )
+        heads.append(SignalHeadInput(**clean))
+    return heads
+
+
+def _legacy_origin(approach: str, branches: list[BranchInput]) -> str:
+    normalized = approach.strip().lower()
+    for branch in branches:
+        if normalized in {branch.code.lower(), branch.name.lower(), branch.position.lower()}:
+            return branch.code
+    return "A"
+
+
+def _legacy_destinations(origin: str, movement: str, codes: list[str]) -> tuple[str, ...]:
+    if origin not in codes or len(codes) < 3:
+        return tuple(code for code in codes if code != origin)[:1]
+    index = codes.index(origin)
+    left = codes[(index + 1) % len(codes)]
+    straight = codes[(index + 2) % len(codes)]
+    right = codes[(index - 1) % len(codes)]
+    normalized = movement.lower()
+    if "izquierda" in normalized:
+        return (left,)
+    if "directo" in normalized and "derecha" in normalized:
+        return tuple(dict.fromkeys((straight, right)))
+    if "directo" in normalized:
+        return (straight,)
+    if "derecha" in normalized:
+        return (right,)
+    return tuple(code for code in codes if code != origin)
 
 
 def _convert_values(
@@ -205,6 +399,11 @@ class LaneGroupResult:
     level_of_service: str
     red_arrivals_veh_cycle: float
     residual_demand_veh: float
+    average_queue_veh: float
+    queue_95_veh: float
+    queue_95_m: float
+    free_flow_travel_time_s: float
+    travel_time_s: float
     warnings: tuple[str, ...] = ()
 
 
@@ -216,4 +415,26 @@ class IntersectionResult:
     level_of_service: str
     critical_degree_of_saturation: float
     critical_lane_group: str
+    maximum_queue_95_m: float
+    weighted_travel_time_s: float
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class SignalPhaseResult:
+    phase_number: int
+    critical_flow_ratio: float
+    green_s: float
+    yellow_s: float
+    all_red_s: float
+    start_s: float
+    end_s: float
+
+
+@dataclass(frozen=True, slots=True)
+class SignalOptimizationResult:
+    method: str
+    cycle_length_s: float
+    total_critical_flow_ratio: float
+    phases: tuple[SignalPhaseResult, ...]
     warnings: tuple[str, ...] = ()

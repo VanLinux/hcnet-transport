@@ -72,6 +72,62 @@ def validate_project(project: IntersectionProject) -> list[ValidationIssue]:
             )
         )
 
+    if project.branch_count not in {3, 4}:
+        issues.append(
+            ValidationIssue(
+                "error", "branch_count", "La intersección debe tener tres o cuatro ramales."
+            )
+        )
+    if len(project.branches) < project.branch_count:
+        issues.append(
+            ValidationIssue(
+                "error", "branches", "No existen suficientes ramales para la geometría elegida."
+            )
+        )
+    active_codes = [branch.code for branch in project.active_branches]
+    if len(set(active_codes)) != len(active_codes):
+        issues.append(ValidationIssue("error", "branches", "Las letras de ramal deben ser únicas."))
+    for branch in project.active_branches:
+        if not branch.code.strip() or not branch.name.strip():
+            issues.append(
+                ValidationIssue("error", "branches", "Cada ramal debe tener letra y nombre.")
+            )
+        if branch.inbound_lanes < 1 or branch.outbound_lanes < 1:
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "branches",
+                    f"Ramal {branch.code}: debe tener carriles de entrada y salida.",
+                )
+            )
+
+    for field_name, value, label in (
+        ("signal_lost_time_s", project.signal_lost_time_s, "tiempo perdido"),
+        ("minimum_green_s", project.minimum_green_s, "verde mínimo"),
+        ("yellow_time_s", project.yellow_time_s, "amarillo"),
+        ("all_red_time_s", project.all_red_time_s, "todo rojo"),
+    ):
+        if not isfinite(value) or value < 0:
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    field_name,
+                    f"El tiempo de {label} debe ser finito y no negativo.",
+                )
+            )
+    if project.signal_lost_time_s <= 0:
+        issues.append(
+            ValidationIssue("error", "signal_lost_time_s", "El tiempo perdido debe ser positivo.")
+        )
+    if project.yellow_time_s + project.all_red_time_s > project.signal_lost_time_s:
+        issues.append(
+            ValidationIssue(
+                "error",
+                "signal_lost_time_s",
+                "Amarillo + todo rojo no puede exceder el tiempo perdido por fase.",
+            )
+        )
+
     if not project.lane_groups:
         issues.append(
             ValidationIssue("error", "lane_groups", "Agrega al menos un grupo de carriles.")
@@ -79,6 +135,92 @@ def validate_project(project: IntersectionProject) -> list[ValidationIssue]:
 
     for index, group in enumerate(project.lane_groups):
         issues.extend(_validate_lane_group(group, project, index))
+
+    lane_usage: dict[tuple[str, int], list[str]] = {}
+    for group in project.lane_groups:
+        for lane in group.lane_indices:
+            lane_usage.setdefault((group.origin_branch, lane), []).append(group.label)
+    for (branch_code, lane), labels in lane_usage.items():
+        if len(labels) > 1:
+            issues.append(
+                ValidationIssue(
+                    "warning",
+                    "lane_groups",
+                    f"Ramal {branch_code}, carril {lane}: aparece en varios grupos "
+                    f"({'; '.join(labels)}). Agrupa los destinos que comparten carril "
+                    "para evitar duplicar capacidad.",
+                )
+            )
+
+    group_ids = {group.identifier for group in project.lane_groups}
+    groups_by_id = {group.identifier: group for group in project.lane_groups}
+    for head in project.signal_heads:
+        if not head.name.strip():
+            issues.append(
+                ValidationIssue("error", "signal_heads", "Cada semáforo debe tener nombre.")
+            )
+        if head.branch_code not in active_codes:
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "signal_heads",
+                    f"{head.name}: el ramal {head.branch_code} no está activo.",
+                )
+            )
+        if head.signal_phase < 1:
+            issues.append(
+                ValidationIssue("error", "signal_heads", f"{head.name}: la fase debe ser positiva.")
+            )
+        unknown = set(head.controlled_group_ids) - group_ids
+        if unknown:
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "signal_heads",
+                    f"{head.name}: contiene movimientos que ya no existen.",
+                )
+            )
+        if not head.controlled_group_ids:
+            issues.append(
+                ValidationIssue(
+                    "warning", "signal_heads", f"{head.name}: no tiene movimientos asignados."
+                )
+            )
+        wrong_phase = [
+            groups_by_id[identifier].label
+            for identifier in head.controlled_group_ids
+            if identifier in groups_by_id
+            and groups_by_id[identifier].signal_phase != head.signal_phase
+        ]
+        if wrong_phase:
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "signal_heads",
+                    f"{head.name}: la fase no coincide con {', '.join(wrong_phase)}.",
+                )
+            )
+
+    if not project.signal_heads:
+        issues.append(
+            ValidationIssue(
+                "warning", "signal_heads", "No se han configurado semáforos en el proyecto."
+            )
+        )
+    else:
+        movement_phases = {group.signal_phase for group in project.lane_groups}
+        head_phases = {head.signal_phase for head in project.signal_heads}
+        missing_phases = movement_phases - head_phases
+        if missing_phases:
+            issues.append(
+                ValidationIssue(
+                    "warning",
+                    "signal_heads",
+                    "No hay semáforos configurados para las fases: "
+                    + ", ".join(str(item) for item in sorted(missing_phases))
+                    + ".",
+                )
+            )
 
     return issues
 
@@ -114,6 +256,9 @@ def _validate_lane_group(
         ("incremental_delay_factor", group.incremental_delay_factor),
         ("upstream_filtering_factor", group.upstream_filtering_factor),
         ("initial_queue_delay_s_veh", group.initial_queue_delay_s_veh),
+        ("free_flow_speed_kmh", group.free_flow_speed_kmh),
+        ("approach_length_m", group.approach_length_m),
+        ("average_vehicle_spacing_m", group.average_vehicle_spacing_m),
     )
     non_finite = [field for field, value in numeric_values if not isfinite(value)]
     for field in non_finite:
@@ -129,6 +274,32 @@ def _validate_lane_group(
         error("volume_veh_h", "el volumen no puede ser negativo.")
     if group.lanes < 1:
         error("lanes", "debe existir al menos un carril.")
+    active_codes = {branch.code for branch in project.active_branches}
+    origin = project.branch(group.origin_branch)
+    if origin is None:
+        error("origin_branch", f"el ramal de origen {group.origin_branch} no está activo.")
+    if not group.destination_branches:
+        error("destination_branches", "selecciona al menos un ramal de destino.")
+    for destination in group.destination_branches:
+        if destination not in active_codes:
+            error("destination_branches", f"el ramal de destino {destination} no está activo.")
+        elif destination == group.origin_branch:
+            error("destination_branches", "el origen y el destino no pueden ser el mismo ramal.")
+    if not group.lane_indices:
+        error("lane_indices", "selecciona al menos un carril.")
+    if len(set(group.lane_indices)) != len(group.lane_indices):
+        error("lane_indices", "la asignación contiene carriles repetidos.")
+    if group.lanes != len(group.lane_indices):
+        error("lanes", "el número de carriles debe coincidir con los carriles seleccionados.")
+    if origin is not None and any(
+        lane < 1 or lane > origin.inbound_lanes for lane in group.lane_indices
+    ):
+        error(
+            "lane_indices",
+            f"los carriles deben estar entre 1 y {origin.inbound_lanes} para el ramal de origen.",
+        )
+    if group.signal_phase < 1:
+        error("signal_phase", "la fase semafórica debe ser mayor o igual que 1.")
     if group.effective_green_s <= 0:
         error("effective_green_s", "el verde efectivo debe ser positivo.")
     elif project.cycle_length_s > 0 and group.effective_green_s >= project.cycle_length_s:
@@ -172,5 +343,19 @@ def _validate_lane_group(
         error("bus_blockages_h", "los bloqueos de autobús no pueden ser negativos.")
     if group.initial_queue_delay_s_veh < 0:
         error("initial_queue_delay_s_veh", "la demora por cola inicial no puede ser negativa.")
+    if group.free_flow_speed_kmh <= 0:
+        error("free_flow_speed_kmh", "la velocidad de flujo libre debe ser positiva.")
+    elif not 10 <= group.free_flow_speed_kmh <= 120:
+        warning(
+            "free_flow_speed_kmh",
+            "la velocidad de flujo libre está fuera del intervalo habitual de 10 a 120 km/h.",
+        )
+    if group.approach_length_m <= 0:
+        error("approach_length_m", "la longitud de aproximación debe ser positiva.")
+    if not 3 <= group.average_vehicle_spacing_m <= 20:
+        error(
+            "average_vehicle_spacing_m",
+            "el espaciamiento medio por vehículo debe estar entre 3 y 20 m.",
+        )
 
     return issues

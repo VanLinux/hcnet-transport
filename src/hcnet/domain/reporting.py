@@ -11,6 +11,7 @@ from hcnet.domain.models import (
     LaneGroupInput,
     LaneGroupResult,
 )
+from hcnet.domain.transit import TransitCalculationError, calculate_transit_line
 
 
 def calculation_trace_html(
@@ -98,9 +99,22 @@ def calculation_trace_html(
       <p>Resultado del grupo: <span class="result">LOS {result.level_of_service}</span>.</p>
       <p>Llegadas estimadas durante el rojo: {result.red_arrivals_veh_cycle:.2f} veh/ciclo.<br>
       Demanda residual al final del periodo: {result.residual_demand_veh:.2f} veh.</p>
+
+      <h3>6. Cola y tiempo de viaje</h3>
+      <div class="equation">Q<sub>media</sub> = R + 0.5q<sub>rojo</sub>
+      = <span class="result">{result.average_queue_veh:.2f} veh</span><br>
+      Q<sub>95</sub> ≈ R + q<sub>rojo</sub> + 1.645√q<sub>rojo</sub>
+      = <span class="result">{result.queue_95_veh:.2f} veh</span><br>
+      L<sub>95</sub> = Q<sub>95</sub>e/N
+      = <span class="result">{result.queue_95_m:.2f} m</span></div>
+      <div class="equation">t₀ = 3.6L/VFL
+      = <span class="result">{result.free_flow_travel_time_s:.2f} s</span><br>
+      t<sub>viaje</sub> = t₀ + d
+      = <span class="result">{result.travel_time_s:.2f} s</span></div>
       {warnings}
       <p class="muted">La demanda residual es un indicador diagnóstico, no una estimación
-      HCM de cola percentil 95. Consulta docs/METHODOLOGY.md para conocer el alcance.</p>
+      HCM de cola percentil 95. Q95 es una aproximación probabilística para diagnóstico
+      y almacenamiento; consulta docs/METHODOLOGY.md para conocer el alcance.</p>
     </body>
     </html>
     """
@@ -122,10 +136,28 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
             f"{_latex_escape(row.label)} & {row.demand_flow_rate_veh_h:.1f} & "
             f"{row.saturation_flow_veh_h:.1f} & {row.capacity_veh_h:.1f} & "
             f"{row.degree_of_saturation:.3f} & {row.control_delay_s_veh:.1f} & "
-            f"{row.level_of_service} \\\\"
+            f"{row.level_of_service} & {row.queue_95_m:.1f} & {row.travel_time_s:.1f} \\\\"
         )
         for row in result.lane_groups
     )
+
+    branch_rows = "\n".join(
+        f"{_latex_escape(branch.code)} & {_latex_escape(branch.name)} & "
+        f"{_latex_escape(branch.position)} & {branch.inbound_lanes} & {branch.outbound_lanes} \\\\"
+        for branch in project.active_branches
+    )
+    group_labels = {group.identifier: group.label for group in project.lane_groups}
+    signal_lines = []
+    for head in project.signal_heads:
+        controlled = ", ".join(
+            group_labels.get(item, item) for item in head.controlled_group_ids
+        )
+        signal_lines.append(
+            f"{_latex_escape(head.name)} & {_latex_escape(head.branch_code)} & "
+            f"{_latex_escape(head.signal_type)} & {head.signal_phase} & "
+            f"{_latex_escape(controlled)} \\\\"
+        )
+    signal_rows = "\n".join(signal_lines) or r"No configurados & --- & --- & --- & --- \\"
 
     warning_items = result.warnings or ("Sin advertencias automáticas.",)
     warnings = "\n".join(f"  \\item {_latex_escape(item)}" for item in warning_items)
@@ -135,6 +167,7 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
         _lane_group_latex(groups_by_id[row.identifier], row, project)
         for row in result.lane_groups
     )
+    transit_section = _transit_latex(project)
 
     return rf"""\documentclass[11pt,a4paper]{{article}}
 \usepackage[utf8]{{inputenc}}
@@ -167,7 +200,7 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
   \vspace*{{2.2cm}}
   {{\Huge\bfseries HCNet Transport\par}}
   \vspace{{0.25cm}}
-  {{\Large Reporte de capacidad y nivel de servicio\par}}
+  {{\Large Reporte de capacidad, operación y nivel de servicio\par}}
   \vspace{{1.2cm}}
   \rule{{\textwidth}}{{1.2pt}}
   \vspace{{0.8cm}}
@@ -197,6 +230,16 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
   \textbf{{Longitud de ciclo, $C$}} & {project.cycle_length_s:.1f} s \\
   \textbf{{Periodo de análisis, $T$}} & {project.analysis_period_h:.2f} h \\
   \textbf{{Grupos de carriles}} & {len(project.lane_groups)} \\
+  \textbf{{Tipo de intersección}} & {project.branch_count} ramales \\
+\end{{tabular}}
+
+\subsection{{Geometría por ramal}}
+\begin{{tabular}}{{llcrr}}
+\toprule
+Letra & Ramal & Ubicación & Entrada & Salida \\
+\midrule
+{branch_rows}
+\bottomrule
 \end{{tabular}}
 
 \subsection{{Notas del proyecto}}
@@ -212,18 +255,20 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
   \textbf{{Grado de saturación crítico}} &
     {result.critical_degree_of_saturation:.3f} \\
   \textbf{{Grupo crítico}} & {_latex_escape(result.critical_lane_group)} \\
+  \textbf{{Cola P95 máxima aproximada}} & {result.maximum_queue_95_m:.1f} m \\
+  \textbf{{Tiempo de viaje ponderado}} & {result.weighted_travel_time_s:.1f} s \\
 \end{{tabular}}
 
 \section{{Resultados por grupo de carriles}}
-\small
-\begin{{longtable}}{{@{{}}p{{4.1cm}}rrrrrr@{{}}}}
+\scriptsize
+\begin{{longtable}}{{@{{}}p{{3.4cm}}rrrrrrrr@{{}}}}
 \toprule
-Grupo & $v$ & $s$ & $c$ & $X$ & $d$ & LOS \\
- & veh/h & veh/h & veh/h &  & s/veh & \\
+Grupo & $v$ & $s$ & $c$ & $X$ & $d$ & LOS & $L_{{95}}$ & $t$ \\
+ & veh/h & veh/h & veh/h &  & s/veh & & m & s \\
 \midrule
 \endfirsthead
 \toprule
-Grupo & $v$ & $s$ & $c$ & $X$ & $d$ & LOS \\
+Grupo & $v$ & $s$ & $c$ & $X$ & $d$ & LOS & $L_{{95}}$ & $t$ \\
 \midrule
 \endhead
 {summary_rows}
@@ -231,8 +276,25 @@ Grupo & $v$ & $s$ & $c$ & $X$ & $d$ & LOS \\
 \end{{longtable}}
 \normalsize
 
+\section{{Configuración semafórica}}
+Método seleccionado: \textbf{{{_latex_escape(project.optimization_method)}}}. Tiempo perdido
+por fase: {project.signal_lost_time_s:.1f} s; verde mínimo: {project.minimum_green_s:.1f} s;
+amarillo: {project.yellow_time_s:.1f} s; todo rojo: {project.all_red_time_s:.1f} s.
+
+\small
+\begin{{longtable}}{{p{{3.0cm}}p{{1.1cm}}p{{3.0cm}}rp{{6.0cm}}}}
+\toprule
+Semáforo & Ramal & Tipo & Fase & Movimientos controlados \\
+\midrule
+{signal_rows}
+\bottomrule
+\end{{longtable}}
+\normalsize
+
 \section{{Memoria de cálculo}}
 {detail_sections}
+
+{transit_section}
 
 \section{{Diagnóstico automático}}
 \begin{{itemize}}
@@ -256,6 +318,70 @@ Software libre bajo GNU GPL v3.0}}
 """
 
 
+def _transit_latex(project: IntersectionProject) -> str:
+    """Construye el resumen independiente de transporte público."""
+
+    data = project.public_transport
+    try:
+        result = calculate_transit_line(data)
+    except TransitCalculationError as exc:
+        messages = " ".join(_latex_escape(message) for message in exc.messages)
+        return rf"\section{{Transporte público}}No calculado: {messages}"
+
+    congestion_rows = "\n".join(
+        f"{_latex_escape(row.model)} & "
+        + (
+            r"No finito & --- & --- \\"
+            if row.travel_time_min is None
+            else f"{row.travel_time_min:.2f} & {row.delay_min:.2f} & "
+            f"{row.commercial_speed_kmh:.2f} \\\\"
+        )
+        for row in result.congestion
+    )
+    warnings = result.warnings or ("Sin advertencias automáticas.",)
+    warning_items = "\n".join(f"  \\item {_latex_escape(item)}" for item in warnings)
+    required_headway = (
+        "---" if result.required_frequency_bus_h == 0 else f"{result.required_headway_min:.2f}"
+    )
+    return rf"""
+\section{{Transporte público}}
+\begin{{tabular}}{{@{{}}ll@{{}}}}
+  \textbf{{Línea}} & {_latex_escape(data.name or "Sin nombre")} \\
+  \textbf{{Longitud por sentido}} & {data.route_length_km:.2f} km \\
+  \textbf{{Velocidad de operación}} & {result.operating_speed_kmh:.2f} km/h \\
+  \textbf{{Velocidad comercial}} & {result.commercial_speed_kmh:.2f} km/h \\
+  \textbf{{Tiempo comercial por sentido}} & {result.commercial_time_one_way_min:.2f} min \\
+  \textbf{{Tiempo de ciclo}} & {result.cycle_time_min:.2f} min \\
+  \textbf{{Frecuencia programada}} & {result.service_frequency_bus_h:.2f} bus/h \\
+  \textbf{{Capacidad de línea}} & {result.line_capacity_pax_h_direction:.1f} pax/h/sentido \\
+  \textbf{{Frecuencia requerida}} & {result.required_frequency_bus_h:.2f} bus/h \\
+  \textbf{{Intervalo requerido}} & {required_headway} min \\
+  \textbf{{Flota mínima + reserva}} & {result.minimum_fleet_veh} +
+    {result.reserve_fleet_veh} = {result.total_fleet_veh} vehículos \\
+  \textbf{{Espaciamiento actual / óptimo}} & {result.actual_stop_spacing_m:.0f} /
+    {result.optimal_stop_spacing_m:.0f} m \\
+  \textbf{{Acceso peatonal medio}} & {result.average_access_time_min:.2f} min \\
+  \textbf{{Permanencia en parada}} & {result.dwell_time_s:.2f} s \\
+  \textbf{{Capacidad de parada crítica}} & {result.critical_stop_capacity_bus_h:.2f} bus/h \\
+  \textbf{{Saturación vial equivalente}} & {result.road_degree_of_saturation:.3f} \\
+\end{{tabular}}
+
+\subsection{{Comparación de funciones de congestión}}
+\begin{{tabular}}{{lrrr}}
+\toprule
+Modelo & Tiempo (min) & Demora (min) & Velocidad (km/h) \\
+\midrule
+{congestion_rows}
+\bottomrule
+\end{{tabular}}
+
+\subsection{{Diagnóstico de la línea}}
+\begin{{itemize}}
+{warning_items}
+\end{{itemize}}
+"""
+
+
 def _lane_group_latex(
     source: LaneGroupInput,
     result: LaneGroupResult,
@@ -270,6 +396,10 @@ def _lane_group_latex(
 \subsection{{{_latex_escape(result.label)}}}
 
 \begin{{tabular}}{{@{{}}ll@{{}}}}
+  Recorrido & {_latex_escape(source.origin_branch)} $\rightarrow$
+    {_latex_escape('/'.join(source.destination_branches))} \\
+  Carriles asignados & {_latex_escape(', '.join(str(item) for item in source.lane_indices))} \\
+  Fase semafórica & {source.signal_phase} \\
   Volumen observado, $V$ & {source.volume_veh_h:.1f} veh/h \\
   Número de carriles, $N$ & {source.lanes} \\
   Verde efectivo, $g$ & {source.effective_green_s:.1f} s \\
@@ -317,6 +447,15 @@ d &= d_1+d_2+d_3 = {result.control_delay_s_veh:.2f}\ \mathrm{{s/veh}}.
 \textbf{{Resultado:}} LOS {result.level_of_service}. Llegadas durante el rojo:
 {result.red_arrivals_veh_cycle:.2f} veh/ciclo; demanda residual:
 {result.residual_demand_veh:.2f} veh.
+
+\begin{{align*}}
+Q_{{media}} &= R + 0.5q_{{rojo}} = {result.average_queue_veh:.2f}\ \mathrm{{veh}},\\
+Q_{{95}} &\approx R+q_{{rojo}}+1.645\sqrt{{q_{{rojo}}}}
+ = {result.queue_95_veh:.2f}\ \mathrm{{veh}},\\
+L_{{95}} &= \frac{{Q_{{95}}}}{{N}}e = {result.queue_95_m:.2f}\ \mathrm{{m}},\\
+t_0 &= \frac{{3.6L}}{{VFL}} = {result.free_flow_travel_time_s:.2f}\ \mathrm{{s}},\\
+t_{{viaje}} &= t_0+d = {result.travel_time_s:.2f}\ \mathrm{{s}}.
+\end{{align*}}
 
 \begin{{itemize}}
 {warnings}

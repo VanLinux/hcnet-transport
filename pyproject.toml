@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hcnet-transport"
-version = "2.0.0"
+version = "3.1.0"
 description = "Aplicación educativa para analizar capacidad y nivel de servicio en instalaciones de transporte."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,6 +18,8 @@ keywords = [
   "capacity",
   "level-of-service",
   "signalized-intersections",
+  "public-transport",
+  "transit-planning",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -33,7 +35,7 @@ classifiers = [
   "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-  "PySide6>=6.7,<7",
+  "PySide6>=6.7,<6.12",
 ]
 
 [project.optional-dependencies]
