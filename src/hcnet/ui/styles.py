@@ -134,6 +134,9 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDateEdit, QTextEdit, QPlainText
     selection-background-color: #4B5057;
     selection-color: #FFFFFF;
 }
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDateEdit {
+    min-height: 1.35em;
+}
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus,
 QDateEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
     border: 2px solid #5F6368;

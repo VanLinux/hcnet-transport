@@ -16,6 +16,16 @@ from hcnet.domain.models import IntersectionProject, LaneGroupInput
 from hcnet.domain.sample import demonstration_project
 
 
+@pytest.mark.parametrize("ramals", [2, 3])
+def test_intersection_calculates_with_reduced_geometry(ramals: int) -> None:
+    project = basic_project()
+    project.branch_count = ramals
+    project.branches[1].azimuth_deg = 170
+    project.lane_groups[0].destination_branches = ("B",)
+    result = calculate_intersection(project)
+    assert result.total_entering_volume_veh_h == 600
+
+
 def basic_project(**overrides) -> IntersectionProject:
     group = LaneGroupInput(
         identifier="test-group",

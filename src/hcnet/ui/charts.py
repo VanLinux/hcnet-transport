@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from math import cos, radians, sin
 
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -35,44 +36,22 @@ class IntersectionSketch(QWidget):
         width = self.width()
         height = self.height()
         size = min(width, height)
-        road = size * 0.30
+        road = size * 0.17
         cx, cy = width / 2, height / 2
-
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#43545D"))
-        painter.drawRect(QRectF(cx - road / 2, 0, road, height))
-        branch_count = self._project.branch_count if self._project is not None else 4
-        if branch_count == 4:
-            painter.drawRect(QRectF(0, cy - road / 2, width, road))
-        else:
-            painter.drawRect(QRectF(cx, cy - road / 2, width - cx, road))
-
-        pen = QPen(QColor("#D5D7DA"), 2, Qt.PenStyle.DashLine)
-        painter.setPen(pen)
-        painter.drawLine(int(cx), 0, int(cx), int(cy - road / 2))
-        painter.drawLine(int(cx), int(cy + road / 2), int(cx), height)
-        if branch_count == 4:
-            painter.drawLine(0, int(cy), int(cx - road / 2), int(cy))
-        painter.drawLine(int(cx + road / 2), int(cy), width, int(cy))
-
-        painter.setPen(QPen(QColor("#F6F8F9"), 3))
-        stop_offset = road / 2 + 9
-        painter.drawLine(
-            int(cx - road / 2), int(cy - stop_offset), int(cx + road / 2), int(cy - stop_offset)
-        )
-        painter.drawLine(
-            int(cx - road / 2), int(cy + stop_offset), int(cx + road / 2), int(cy + stop_offset)
-        )
-        if branch_count == 4:
+        center = QPointF(cx, cy)
+        branches = self._project.active_branches if self._project is not None else []
+        ends = [
+            QPointF(sin(radians(branch.azimuth)), -cos(radians(branch.azimuth)))
+            for branch in branches
+        ]
+        for direction in ends:
+            painter.setPen(QPen(QColor("#43545D"), road))
+            painter.drawLine(center, center + direction * (size * 0.32))
+        for direction in ends:
+            painter.setPen(QPen(QColor("#D5D7DA"), 2, Qt.PenStyle.DashLine))
             painter.drawLine(
-                int(cx - stop_offset),
-                int(cy - road / 2),
-                int(cx - stop_offset),
-                int(cy + road / 2),
+                center + direction * (road * 0.65), center + direction * (size * 0.32)
             )
-        painter.drawLine(
-            int(cx + stop_offset), int(cy - road / 2), int(cx + stop_offset), int(cy + road / 2)
-        )
 
         totals: defaultdict[str, float] = defaultdict(float)
         if self._project is not None:
@@ -81,20 +60,16 @@ class IntersectionSketch(QWidget):
 
         painter.setFont(QFont(painter.font().family(), 9, QFont.Weight.DemiBold))
         painter.setPen(QColor(COLORS["navy"]))
-        positions = (
-            QRectF(cx - 78, 8, 156, 48),
-            QRectF(width - 148, cy - 54, 140, 48),
-            QRectF(cx - 78, height - 56, 156, 48),
-            QRectF(8, cy - 54, 140, 48),
-        )
-        branches = self._project.active_branches if self._project is not None else []
-        for branch, rectangle in zip(branches, positions, strict=False):
+        for branch, direction in zip(branches, ends, strict=True):
+            label_x = min(width - 140, max(0, cx + direction.x() * size * 0.44 - 70))
+            label_y = min(height - 38, max(0, cy + direction.y() * size * 0.44 - 19))
+            rectangle = QRectF(label_x, label_y, 140, 38)
             value = totals[branch.code]
             text = (
-                f"{branch.code} · {branch.name}\n{branch.inbound_lanes} carriles · "
+                f"{branch.label}\n{branch.inbound_lanes} carriles · "
                 f"{value:,.0f} veh/h"
                 if value
-                else f"{branch.code} · {branch.name}\n{branch.inbound_lanes} carriles"
+                else f"{branch.label}\n{branch.inbound_lanes} carriles"
             )
             painter.drawText(rectangle, Qt.AlignmentFlag.AlignCenter, text)
 

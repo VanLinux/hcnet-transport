@@ -8,12 +8,13 @@ Manual* (HCM).
 
 [![Pruebas](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml/badge.svg)](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml)
 [![Licencia: GPL v3](https://img.shields.io/badge/Licencia-GPLv3-blue.svg)](LICENSE)
-[![Versión](https://img.shields.io/badge/versión-3.1.0-3f444b.svg)](CHANGELOG.md)
+[![Versión](https://img.shields.io/badge/versión-3.2.0-3f444b.svg)](CHANGELOG.md)
 
-## Versión 3.1
+## Versión 3.2
 
-HCNet Transport 3.0 analiza **intersecciones semaforizadas aisladas de tres o cuatro
-ramales con control de tiempo fijo**. La geometría se describe con letras A–D y cada
+HCNet Transport analiza **intersecciones semaforizadas aisladas de dos, tres o cuatro
+ramales con control de tiempo fijo**. Cada ramal tiene azimut editable. La geometría
+se describe con letras A–D y cada
 movimiento se captura como un recorrido origen–destino, por ejemplo `A → C`, asignado
 a carriles y fases concretas.
 
@@ -64,24 +65,36 @@ no realiza asignación de red, modelación de uso de suelo, transbordos ni equil
 multimodal.
 
 La interfaz separa proyecto, geometría, movimientos, semaforización, resultados y
-reporte técnico. Los proyectos anteriores se migran al abrirse y los nuevos datos se
-conservan en JSON, CSV y LaTeX.
+reporte técnico. `↔` indica pestañas del análisis compartido de intersecciones y
+`◇` indica módulos independientes con reporte propio.
+
+### Rotondas
+
+El módulo independiente analiza rotondas de un carril con dos a ocho ramales,
+azimuts y sentido de circulación editables. A partir de aforos origen–destino
+estima flujos conflictivos, capacidad, demora, relación v/c, LOS y cola P95.
+Incluye un esquema y calcula radios de trayectoria por cuerda y flecha, radios
+de isla y anillo, velocidad teórica y distancia de parada. La geometría es de
+predimensionamiento. Véase [la metodología](docs/METHODOLOGY.md#14-rotondas).
 
 ## Uso básico
 
 1. Revisa la presentación y las limitaciones en **Inicio y alcance**.
 2. Define nombre, ubicación, analista, ciclo y periodo de análisis en **Proyecto**.
-3. Define tres o cuatro ramales y sus carriles en **Geometría**.
+3. Define dos, tres o cuatro ramales, sus carriles y azimuts en **Geometría**.
 4. Captura recorridos A–D, carriles, demanda y fase en **Movimientos y carriles**.
 5. Configura los semáforos y ejecuta **Optimizar y aplicar** si deseas usar Webster.
 6. Captura servicio, demanda, paradas y oferta vial en **Transporte público**.
 7. Presiona **Calcular línea** para dimensionar la operación y comparar congestión.
-8. Presiona **Calcular proyecto** o `F5` para actualizar todos los módulos válidos.
+8. Presiona **Calcular proyecto** o `F5` para calcular el módulo de la pestaña activa.
 9. Examina LOS, demora, colas y tiempo de viaje en **Resultados intersección**.
-10. Abre **Reporte técnico** para revisar o exportar la memoria `.tex`.
-11. Guarda el proyecto como `*.hcnet.json` o exporta los resultados a CSV.
+10. Exporta la intersección en **Reporte técnico**. **Rotondas** y **Transporte público**
+    tienen su propio botón de exportación.
+11. Guarda el proyecto como `*.hcnet`. Conserva datos, plan semafórico aplicado y el estado
+    de cálculo de los tres módulos. **Abrir** también acepta proyectos `*.hcnet.json`.
 
-La exportación LaTeX requiere capturar el nombre del analista. El archivo generado
+La exportación LaTeX solicita el nombre del analista y el nombre y destino del archivo.
+El archivo generado
 puede compilarse con una distribución LaTeX convencional:
 
 ```bash
@@ -89,8 +102,8 @@ pdflatex nombre_del_reporte.tex
 pdflatex nombre_del_reporte.tex
 ```
 
-Al abrir el programa se carga automáticamente un caso hipotético para explorar la
-interfaz. El archivo
+El programa abre un proyecto vacío. Para explorar la interfaz, usa **Proyecto →
+Cargar caso demostrativo**. El archivo
 [`examples/interseccion_demo_cdmx.hcnet.json`](examples/interseccion_demo_cdmx.hcnet.json)
 contiene el mismo tipo de información y puede abrirse desde el menú **Archivo**.
 

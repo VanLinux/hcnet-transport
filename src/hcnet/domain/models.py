@@ -8,9 +8,14 @@ from typing import Any
 from uuid import uuid4
 
 from hcnet import __version__
+from hcnet.domain.roundabout import RoundaboutInput
 from hcnet.domain.transit import TransitLineInput
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+AZIMUTHS = dict(zip(
+    ("Norte", "Noreste", "Oriente", "Sureste", "Sur", "Suroeste", "Poniente", "Noroeste"),
+    range(0, 360, 45), strict=True,
+))
 
 
 def _identifier() -> str:
@@ -78,10 +83,19 @@ class BranchInput:
     position: str
     inbound_lanes: int = 2
     outbound_lanes: int = 2
+    azimuth_deg: float | None = None
+
+    @property
+    def azimuth(self) -> float:
+        if self.azimuth_deg is not None:
+            return self.azimuth_deg
+        return AZIMUTHS.get(self.position, {"A": 0, "B": 90, "C": 180, "D": 270}.get(
+            self.code, 0
+        ))
 
     @property
     def label(self) -> str:
-        return f"{self.code} · {self.name}"
+        return f"{self.code} · {self.name}" if self.name else self.code
 
 
 def default_branches() -> list[BranchInput]:
@@ -125,6 +139,9 @@ class IntersectionProject:
     yellow_time_s: float = 3.0
     all_red_time_s: float = 1.0
     public_transport: TransitLineInput = field(default_factory=TransitLineInput)
+    roundabout: RoundaboutInput = field(default_factory=RoundaboutInput)
+    calculated_modules: tuple[str, ...] = ()
+    signal_optimization: SignalOptimizationResult | None = None
     notes: str = ""
 
     @property
@@ -164,6 +181,11 @@ class IntersectionProject:
         raw_branches = data.pop("branches", None)
         raw_heads = data.pop("signal_heads", [])
         raw_public_transport = data.pop("public_transport", None)
+        raw_roundabout = data.pop("roundabout", None)
+        raw_calculations = data.pop("calculated_modules", [])
+        raw_optimization = data.pop("signal_optimization", None)
+        if not isinstance(raw_calculations, list):
+            raise ValueError("Los módulos calculados deben ser una lista.")
         if not isinstance(raw_groups, list):
             raise ValueError("'lane_groups' debe ser una lista.")
         if raw_branches is not None and not isinstance(raw_branches, list):
@@ -251,13 +273,19 @@ class IntersectionProject:
             groups.append(LaneGroupInput(**clean_group))
 
         heads = _parse_signal_heads(raw_heads)
-        public_transport = TransitLineInput.from_dict(raw_public_transport)
+        public_transport = (
+            TransitLineInput.empty() if raw_public_transport is None
+            else TransitLineInput.from_dict(raw_public_transport)
+        )
         branch_count = int(clean_project.get("branch_count", 4))
         return cls(
             branches=branches,
             lane_groups=groups,
             signal_heads=heads,
             public_transport=public_transport,
+            roundabout=RoundaboutInput.from_dict(raw_roundabout),
+            calculated_modules=tuple(raw_calculations),
+            signal_optimization=SignalOptimizationResult.from_dict(raw_optimization),
             branch_count=branch_count,
             **{key: value for key, value in clean_project.items() if key != "branch_count"},
         )
@@ -277,6 +305,8 @@ def _parse_branches(raw: list[dict[str, Any]] | None) -> list[BranchInput]:
             strings=("code", "name", "position"),
             integers=("inbound_lanes", "outbound_lanes"),
         )
+        if clean.get("azimuth_deg") is not None:
+            clean["azimuth_deg"] = float(clean["azimuth_deg"])
         branches.append(BranchInput(**clean))
     defaults = default_branches()
     for fallback in defaults:
@@ -438,3 +468,19 @@ class SignalOptimizationResult:
     total_critical_flow_ratio: float
     phases: tuple[SignalPhaseResult, ...]
     warnings: tuple[str, ...] = ()
+
+    @classmethod
+    def from_dict(cls, raw: Any) -> SignalOptimizationResult | None:
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise ValueError("El plan semafórico debe ser un objeto.")
+        try:
+            return cls(
+                str(raw["method"]), float(raw["cycle_length_s"]),
+                float(raw["total_critical_flow_ratio"]),
+                tuple(SignalPhaseResult(**phase) for phase in raw["phases"]),
+                tuple(raw.get("warnings", [])),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("El plan semafórico guardado está incompleto.") from exc

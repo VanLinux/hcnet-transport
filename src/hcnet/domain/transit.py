@@ -50,6 +50,16 @@ class TransitLineInput:
     exponential_alpha: float = 0.15
 
     @classmethod
+    def empty(cls) -> TransitLineInput:
+        data = cls()
+        for param in fields(cls):
+            value = getattr(data, param.name)
+            if isinstance(value, int | float):
+                setattr(data, param.name, type(value)(0))
+        data.name = ""
+        return data
+
+    @classmethod
     def from_dict(cls, payload: dict[str, Any] | None) -> TransitLineInput:
         """Carga entradas tolerando campos futuros y números serializados como texto."""
 
@@ -175,6 +185,15 @@ def validate_transit_line(data: TransitLineInput) -> list[str]:
         errors.append("Número de paradas: debe haber al menos dos por sentido.")
     if data.exchange_mode not in {"Simultáneo", "Secuencial"}:
         errors.append("Intercambio de pasajeros: selecciona Simultáneo o Secuencial.")
+    exchange = (
+        data.boardings_per_stop * data.boarding_time_s_pax,
+        data.alightings_per_stop * data.alighting_time_s_pax,
+    )
+    if not any(exchange) and data.door_open_close_s == 0:
+        if data.stop_clearance_s == 0:
+            errors.append("Indica un tiempo positivo de permanencia o despeje de parada.")
+        if data.stop_accel_decel_penalty_s == 0:
+            errors.append("Indica un tiempo positivo de permanencia o penalización por parada.")
     return errors
 
 
@@ -314,7 +333,11 @@ def congestion_time(
             return None
         return free_flow_time_min * (1.0 + data.davidson_j * x / (1.0 - x))
     if model == "Exponencial":
-        return free_flow_time_min * exp(data.exponential_alpha * x)
+        try:
+            value = free_flow_time_min * exp(data.exponential_alpha * x)
+        except OverflowError:
+            return None
+        return value if isfinite(value) else None
     raise ValueError(f"Modelo de congestión desconocido: {model}")
 
 

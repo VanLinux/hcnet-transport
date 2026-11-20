@@ -6,7 +6,14 @@ import pytest
 
 from hcnet.domain.calculations import calculate_intersection
 from hcnet.domain.sample import demonstration_project
-from hcnet.io.project import export_report_tex, export_results_csv, load_project, save_project
+from hcnet.io.project import (
+    export_report_tex,
+    export_results_csv,
+    export_roundabout_tex,
+    export_transit_tex,
+    load_project,
+    save_project,
+)
 
 
 def test_project_json_round_trip(tmp_path) -> None:
@@ -49,13 +56,12 @@ def test_latex_report_contains_analyst_results_and_escaped_text(tmp_path) -> Non
 
     report = path.read_text(encoding="utf-8")
     assert report.startswith(r"\documentclass")
-    assert "HCNet Transport 3.1.0" in report
+    assert "HCNet Transport 3.2.0" in report
     assert r"Cruce Norte \& Sur\_1" in report
     assert r"Dra. Ana López \& equipo" in report
     assert r"\section{Resultados por grupo de carriles}" in report
     assert rf"\textbf{{Nivel de servicio}} & {result.level_of_service}" in report
-    assert r"\section{Transporte público}" in report
-    assert "Corredor Universidad" in report
+    assert r"\section{Transporte público}" not in report
     assert report.count(r"\subsection{") >= len(project.lane_groups)
 
 
@@ -65,7 +71,19 @@ def test_saved_project_records_current_application_version(tmp_path) -> None:
 
     save_project(project, path)
 
-    assert '"application_version": "3.1.0"' in path.read_text(encoding="utf-8")
+    assert '"application_version": "3.2.0"' in path.read_text(encoding="utf-8")
+
+
+def test_independent_latex_reports_work_without_intersection(tmp_path) -> None:
+    project = demonstration_project()
+    project.lane_groups.clear()
+    project.analyst = "Equipo A & B"
+    transit = export_transit_tex(project, tmp_path / "transporte.tex").read_text()
+    roundabout = export_roundabout_tex(project, tmp_path / "rotonda.tex").read_text()
+    assert r"Equipo A \& B" in transit and r"Equipo A \& B" in roundabout
+    assert "Corredor Universidad" in transit
+    assert "Aforos origen--destino" in roundabout
+    assert "Resultados por grupo de carriles" not in roundabout + transit
 
 
 def test_loader_accepts_project_payload_without_envelope(tmp_path) -> None:

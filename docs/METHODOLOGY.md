@@ -1,4 +1,4 @@
-# Metodología de HCNet Transport 3.1
+# Metodología de HCNet Transport 3.2
 
 ## 1. Propósito y alcance
 
@@ -33,13 +33,15 @@ demás factores se introducen como fracciones adimensionales.
 
 ### Geometría y convención de movimientos
 
-La intersección puede tener tres o cuatro ramales. Los ramales activos se identifican
+La intersección puede tener dos, tres o cuatro ramales. Los ramales activos se identifican
 con letras A–D y cada grupo se define mediante:
 
 - ramal de origen y uno o varios ramales de destino;
 - uno o varios carriles de entrada;
 - fase semafórica;
 - número de carriles del grupo, igual al número de carriles seleccionados.
+
+La orientación se expresa como azimut desde el norte en sentido horario.
 
 La notación `A → C` evita depender de nombres como izquierda o directo cuando se
 analizan geometrías de tres ramales o configuraciones no ortogonales.
@@ -411,3 +413,34 @@ documentarse; no deben ocultarse ajustando constantes sin fundamento.
 
 Las referencias identifican el marco metodológico; su inclusión no implica afiliación
 ni autorización del proyecto.
+
+## 14. Rotondas
+
+Se representa una rotonda de un carril de circulación y un carril por entrada.
+El modelo ordena los ramales según su azimut y el sentido de circulación.
+Cada flujo OD aporta al conflicto de los ramales intermedios. La diagonal
+representa retornos en U. Los vehículos que salen en un ramal se retiran antes
+de contabilizar el conflicto de su entrada. El modelo usa la demanda ajustada
+por FHMD y no impone restricciones de descarga en entradas sobresaturadas.
+
+La capacidad de entrada en veh/h es `c = A exp(-B q_c) f_p / E_i`, donde
+`q_c` es flujo conflictivo en vehículos equivalentes por hora, `f_p` es
+el factor peatonal y `E_i = 1 + P_i (E_p - 1)` convierte la mezcla de la
+entrada. Los coeficientes iniciales `A=1130` y `B=0.001` proceden de la
+ecuación 4-3 del [NCHRP Report 672](https://www.fdot.gov/docs/default-source/traffic/doc_library/pdf/nchrp_rpt_672.pdf).
+La demora y P95 siguen las ecuaciones 4-10 y 4-13 para un periodo sin cola
+inicial. Los umbrales de demora A a E son 10, 15, 25, 35 y 50 s/veh.
+La entrada también pasa a F si `v/c > 1`. El LOS global usa la demora ponderada.
+
+El eje anular se aproxima mediante un círculo de radio `D/2 - w/2`;
+el radio de isla con corona es `D/2 - w`. Los radios de entrada y salida
+pueden medirse directamente o calcularse con una cuerda `L` y la flecha
+`s` de un arco circular mediante `R = L²/(8s) + s/2`. Para fricción lateral
+`f` y pendiente transversal con signo `e`, en fracción, se calcula el radio
+de comprobación `V²/[127(e+f)]`. La distancia de parada en rasante plana
+suma percepción-reacción y frenado con desaceleración constante.
+
+El resultado geométrico sirve para predimensionamiento. El trazado definitivo
+requiere comprobar trayectorias rápidas y barrido del vehículo de diseño,
+visibilidad, deflexión, cruces peatonales y condiciones locales. Véase
+[NCHRP Report 1043, Guide for Roundabouts](https://www.nationalacademies.org/publications/27069).

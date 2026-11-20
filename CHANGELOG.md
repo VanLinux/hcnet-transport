@@ -2,6 +2,16 @@
 
 Todos los cambios relevantes de HCNet Transport se documentan en este archivo.
 
+## 3.2.0
+
+- Ventana adaptable, formularios desplazables y altura mínima para los campos de captura.
+- Inicio sin caso de ejemplo. La carga demostrativa se elige en el menú Proyecto.
+- Proyectos `.hcnet` con datos y estado de los módulos, incluido el plan semafórico.
+- Pestañas identificadas por relación entre cálculos y exportación LaTeX por módulo.
+- Intersecciones con dos a cuatro ramales y azimut editable.
+- Módulo independiente de rotondas de un carril con matriz OD, análisis operacional
+  y predimensionamiento geométrico.
+
 ## [3.1.0] - 2026-11-20
 
 ### Añadido

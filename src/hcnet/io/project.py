@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from hcnet.domain.models import IntersectionProject, IntersectionResult
-from hcnet.domain.reporting import latex_report
+from hcnet.domain.reporting import latex_report, roundabout_latex, transit_latex
 
 
 def load_project(path: str | Path) -> IntersectionProject:
@@ -135,6 +135,14 @@ def export_report_tex(
 
     destination = Path(path)
     return _atomic_write_text(destination, latex_report(project, result))
+
+
+def export_transit_tex(project: IntersectionProject, path: str | Path) -> Path:
+    return _atomic_write_text(Path(path), transit_latex(project))
+
+
+def export_roundabout_tex(project: IntersectionProject, path: str | Path) -> Path:
+    return _atomic_write_text(Path(path), roundabout_latex(project))
 
 
 def _atomic_write_text(destination: Path, content: str) -> Path:

@@ -11,7 +11,8 @@ from hcnet.domain.models import (
     LaneGroupInput,
     LaneGroupResult,
 )
-from hcnet.domain.transit import TransitCalculationError, calculate_transit_line
+from hcnet.domain.roundabout import ArmResult, RoundaboutArm, calculate_roundabout
+from hcnet.domain.transit import calculate_transit_line
 
 
 def calculation_trace_html(
@@ -143,7 +144,8 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
 
     branch_rows = "\n".join(
         f"{_latex_escape(branch.code)} & {_latex_escape(branch.name)} & "
-        f"{_latex_escape(branch.position)} & {branch.inbound_lanes} & {branch.outbound_lanes} \\\\"
+        f"{_latex_escape(branch.position)} & {branch.azimuth:.2f} & "
+        f"{branch.inbound_lanes} & {branch.outbound_lanes} \\\\"
         for branch in project.active_branches
     )
     group_labels = {group.identifier: group.label for group in project.lane_groups}
@@ -167,7 +169,13 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
         _lane_group_latex(groups_by_id[row.identifier], row, project)
         for row in result.lane_groups
     )
-    transit_section = _transit_latex(project)
+    optimization = project.signal_optimization
+    plan = ""
+    if optimization is not None:
+        phases = ", ".join(
+            f"F{row.phase_number}: {row.green_s:.1f} s de verde" for row in optimization.phases
+        )
+        plan = f"Ciclo optimizado: {optimization.cycle_length_s:.1f} s. {phases}."
 
     return rf"""\documentclass[11pt,a4paper]{{article}}
 \usepackage[utf8]{{inputenc}}
@@ -234,9 +242,9 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
 \end{{tabular}}
 
 \subsection{{Geometría por ramal}}
-\begin{{tabular}}{{llcrr}}
+\begin{{tabular}}{{llcrrr}}
 \toprule
-Letra & Ramal & Ubicación & Entrada & Salida \\
+Letra & Ramal & Ubicación & Azimut ($^\circ$) & Entrada & Salida \\
 \midrule
 {branch_rows}
 \bottomrule
@@ -290,11 +298,10 @@ Semáforo & Ramal & Tipo & Fase & Movimientos controlados \\
 \bottomrule
 \end{{longtable}}
 \normalsize
+{plan}
 
 \section{{Memoria de cálculo}}
 {detail_sections}
-
-{transit_section}
 
 \section{{Diagnóstico automático}}
 \begin{{itemize}}
@@ -318,15 +325,31 @@ Software libre bajo GNU GPL v3.0}}
 """
 
 
+def _module_latex(project: IntersectionProject, title: str, content: str) -> str:
+    return rf"""\documentclass[11pt,a4paper]{{article}}
+\usepackage[utf8]{{inputenc}}
+\usepackage[T1]{{fontenc}}
+\usepackage[margin=2cm]{{geometry}}
+\usepackage{{booktabs,longtable,amsmath}}
+\setlength{{\parindent}}{{0pt}}
+\begin{{document}}
+\section*{{HCNet Transport {__version__} · {title}}}
+\textbf{{Analista}}: {_latex_escape(project.analyst)}\par
+\textbf{{Proyecto}}: {_latex_escape(project.name or "Sin nombre")}\par
+\textbf{{Fecha}}: {_latex_escape(project.study_date)}\par
+{content}
+\end{{document}}
+"""
+
+
+def transit_latex(project: IntersectionProject) -> str:
+    return _module_latex(project, "Transporte público", _transit_latex(project))
+
+
 def _transit_latex(project: IntersectionProject) -> str:
-    """Construye el resumen independiente de transporte público."""
 
     data = project.public_transport
-    try:
-        result = calculate_transit_line(data)
-    except TransitCalculationError as exc:
-        messages = " ".join(_latex_escape(message) for message in exc.messages)
-        return rf"\section{{Transporte público}}No calculado: {messages}"
+    result = calculate_transit_line(data)
 
     congestion_rows = "\n".join(
         f"{_latex_escape(row.model)} & "
@@ -362,6 +385,9 @@ def _transit_latex(project: IntersectionProject) -> str:
     {result.optimal_stop_spacing_m:.0f} m \\
   \textbf{{Acceso peatonal medio}} & {result.average_access_time_min:.2f} min \\
   \textbf{{Permanencia en parada}} & {result.dwell_time_s:.2f} s \\
+  \textbf{{Ascenso / descenso}} & {result.boarding_service_time_s:.2f} /
+    {result.alighting_service_time_s:.2f} s \\
+  \textbf{{Margen de oferta}} & {result.capacity_margin_pax_h_direction:+.1f} pax/h/sentido \\
   \textbf{{Capacidad de parada crítica}} & {result.critical_stop_capacity_bus_h:.2f} bus/h \\
   \textbf{{Saturación vial equivalente}} & {result.road_degree_of_saturation:.3f} \\
 \end{{tabular}}
@@ -380,6 +406,95 @@ Modelo & Tiempo (min) & Demora (min) & Velocidad (km/h) \\
 {warning_items}
 \end{{itemize}}
 """
+
+
+def roundabout_latex(project: IntersectionProject) -> str:
+    data = project.roundabout
+    result = calculate_roundabout(data)
+    rows = "\n".join(
+        f"{a.code} & {a.entry:.1f} & {a.exiting:.1f} & {a.conflicting_equivalent:.1f} & "
+        f"{a.capacity:.1f} & {a.saturation:.3f} & {a.delay:.1f} & "
+        f"{_latex_escape(a.los)} & {a.queue_95:.1f} & {a.queue_95_m:.1f} " + r"\\"
+        for a in result.arms
+    )
+
+    def geometry_row(arm: RoundaboutArm, row: ArmResult) -> str:
+        values = (
+            arm.azimuth_deg, arm.entry_width_m or None, arm.exit_width_m or None,
+            row.entry_radius, row.exit_radius, row.entry_speed,
+            row.exit_speed, row.next_angle, row.arc_length,
+        )
+        return (
+            row.code + " & "
+            + " & ".join("---" if v is None else f"{v:.2f}" for v in values) + r" \\"
+        )
+
+    geometry = "\n".join(
+        geometry_row(arm, row) for arm, row in zip(data.arms, result.arms, strict=False)
+    )
+    matrix_columns = "r" * (data.arm_count + 1)
+    codes = " & ".join(row.code for row in result.arms)
+    matrix = "\n".join(
+        r.code + " & " + " & ".join(f"{v:g}" for v in row[:data.arm_count]) + r" \\"
+        for r, row in zip(result.arms, data.flows, strict=False)
+    )
+    warnings = "\n\n".join(_latex_escape(w) for w in result.warnings)
+    return _module_latex(project, "Rotondas", rf"""
+\subsection*{{{_latex_escape(data.name or "Rotonda sin nombre")}}}
+Rotonda de un carril, {data.arm_count} ramales y sentido {_latex_escape(data.circulation)}.
+Demanda ajustada: {result.total_entry:.1f} veh/h.
+Demora ponderada: {result.delay:.1f} s/veh. LOS: {_latex_escape(result.los)}.
+
+\subsection*{{Operación por ramal}}
+\small
+\begin{{longtable}}{{lrrrrrrrrr}}
+\toprule
+Ramal & Entrada & Salida & Conflicto & Capacidad & $v/c$ & Demora & LOS & P95 & P95 (m) \\
+ & veh/h & veh/h & eq/h & veh/h & & s/veh & & veh & m \\
+\midrule
+{rows}
+\bottomrule
+\end{{longtable}}
+\normalsize
+
+\subsection*{{Geometría preliminar}}
+Diámetro inscrito: {data.diameter_m:.2f} m. Ancho anular: {data.circulating_width_m:.2f} m.
+Corona montable: {data.apron_width_m:.2f} m. Radio de isla total: {result.island_radius:.2f} m.
+Radio de isla no montable: {result.hard_island_radius:.2f} m.
+Radio del eje anular: {result.centerline_radius:.2f} m.
+Radio mínimo a {data.design_speed_kmh:.1f} km/h: {result.design_min_radius:.2f} m.
+Velocidad teórica del eje: {result.centerline_speed:.1f} km/h.
+Distancia de visibilidad de parada: {result.stopping_distance:.1f} m.
+
+\small
+\begin{{longtable}}{{lrrrrrrrrr}}
+\toprule
+Ramal & Azimut & Ancho E & Ancho S & Radio E & Radio S & Vel. E & Vel. S & Ángulo & Arco \\
+ & $^\circ$ & m & m & m & m & km/h & km/h & $^\circ$ & m \\
+\midrule
+{geometry}
+\bottomrule
+\end{{longtable}}
+\normalsize
+
+\subsection*{{Aforos origen--destino (veh/h)}}
+\begin{{tabular}}{{{matrix_columns}}}
+\toprule
+O/D & {codes} \\
+\midrule
+{matrix}
+\bottomrule
+\end{{tabular}}
+
+\subsection*{{Método y diagnóstico}}
+Capacidad exponencial y demora y cola P95 del NCHRP Report 672, capítulo 4.
+$A={data.capacity_a:g}$ eq/h, $B={data.capacity_b:g}$ h/eq,
+$FHMD={data.peak_hour_factor:g}$, $T={data.period_h:g}$ h.
+Los radios de trayectoria proceden de medición directa o de cuerda y flecha.
+La geometría es preliminar.
+
+{warnings or "Sin alertas para los datos capturados."}
+""")
 
 
 def _lane_group_latex(

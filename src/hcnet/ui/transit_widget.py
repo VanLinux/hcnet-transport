@@ -56,6 +56,7 @@ class PublicTransportTab(QWidget):
 
     input_changed = Signal()
     calculate_requested = Signal()
+    export_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -72,17 +73,21 @@ class PublicTransportTab(QWidget):
         step: float = 1.0,
     ) -> QDoubleSpinBox:
         widget = QDoubleSpinBox()
-        widget.setRange(minimum, maximum)
+        widget.setRange(0 if minimum > 0 else minimum, maximum)
         widget.setDecimals(decimals)
         widget.setSingleStep(step)
         widget.setSuffix(suffix)
         widget.setKeyboardTracking(False)
+        if minimum > 0:
+            widget.setSpecialValueText("Por capturar")
         return widget
 
     @staticmethod
     def _integer(minimum: int, maximum: int, suffix: str = "") -> QSpinBox:
         widget = QSpinBox()
-        widget.setRange(minimum, maximum)
+        widget.setRange(0, maximum)
+        if minimum > 0:
+            widget.setSpecialValueText("Por capturar")
         widget.setSuffix(suffix)
         widget.setKeyboardTracking(False)
         return widget
@@ -92,7 +97,6 @@ class PublicTransportTab(QWidget):
         outer_layout.setContentsMargins(0, 0, 0, 0)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 12, 0, 14)
@@ -116,6 +120,9 @@ class PublicTransportTab(QWidget):
         calculate_button.setObjectName("primaryButton")
         calculate_button.clicked.connect(self.calculate_requested.emit)
         heading.addWidget(calculate_button)
+        export_button = QPushButton("Exportar reporte .tex")
+        export_button.clicked.connect(self.export_requested.emit)
+        heading.addWidget(export_button)
         layout.addLayout(heading)
 
         banner = QLabel(
@@ -159,7 +166,7 @@ class PublicTransportTab(QWidget):
                 self.balance_metric,
             )
         ):
-            cards.addWidget(metric, index // 4, index % 4)
+            cards.addWidget(metric, index // 2, index % 2)
         results_layout.addLayout(cards)
         layout.addWidget(results_box)
 
@@ -277,8 +284,8 @@ class PublicTransportTab(QWidget):
             ("Exponencial, α:", self.exponential_alpha),
         )
         for index, (label, widget) in enumerate(widgets):
-            pair = index % 4
-            row = index // 4
+            pair = index % 2
+            row = index // 2
             grid.addWidget(QLabel(label), row, pair * 2)
             grid.addWidget(widget, row, pair * 2 + 1)
         return box

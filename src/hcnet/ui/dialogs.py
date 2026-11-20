@@ -56,12 +56,13 @@ class LaneGroupDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._source = group or LaneGroupInput()
+        self._source = group or LaneGroupInput(volume_veh_h=0)
         self._cycle_length_s = cycle_length_s
         self._project = project or IntersectionProject(cycle_length_s=cycle_length_s)
         self.setWindowTitle("Grupo de carriles")
         self.setModal(True)
-        self.resize(690, 650)
+        available = self.screen().availableGeometry()
+        self.resize(min(690, available.width() - 24), min(650, available.height() - 50))
         self._build_ui()
         self._set_values(self._source)
 
@@ -349,7 +350,8 @@ class SignalHeadDialog(QDialog):
         self._project = project
         self._source = head or SignalHeadInput(name=f"Semáforo {len(project.signal_heads) + 1}")
         self.setWindowTitle("Configuración del semáforo")
-        self.resize(560, 520)
+        available = self.screen().availableGeometry()
+        self.resize(min(560, available.width() - 24), min(520, available.height() - 50))
 
         root = QVBoxLayout(self)
         title = QLabel("Cabeza o grupo semafórico")
@@ -438,6 +440,5 @@ def _select_list_data(widget: QListWidget, values: set[object]) -> None:
 def _scrollable(content: QWidget) -> QScrollArea:
     area = QScrollArea()
     area.setWidgetResizable(True)
-    area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     area.setWidget(content)
     return area

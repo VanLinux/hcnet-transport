@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from hcnet.domain.models import IntersectionProject, LaneGroupInput, SignalHeadInput
+from hcnet.domain.roundabout import RoundaboutInput
 from hcnet.domain.transit import TransitLineInput
 
 
@@ -153,6 +154,22 @@ def demonstration_project() -> IntersectionProject:
         )
         for index, group in enumerate(groups)
     ]
+    roundabout = RoundaboutInput(
+        name="Rotonda de cuatro accesos (caso demostrativo)", arm_count=4,
+        diameter_m=38, circulating_width_m=6, apron_width_m=2, design_speed_kmh=25,
+        peak_hour_factor=0.92,
+    )
+    for i, name in enumerate(("Norte", "Oriente", "Sur", "Poniente")):
+        arm = roundabout.arms[i]
+        arm.name = name
+        arm.azimuth_deg = 90 * i
+        arm.entry_width_m = 4
+        arm.exit_width_m = 4.5
+        arm.entry_radius_m = 19
+        arm.exit_radius_m = 32
+        arm.storage_m = 45
+        arm.heavy_percent = 4
+        roundabout.flows[i][:4] = [0 if i == j else 80 + 20*j for j in range(4)]
     return IntersectionProject(
         name="Av. Universidad × Eje 10 Sur (caso demostrativo)",
         location="Ciudad de México",
@@ -162,6 +179,7 @@ def demonstration_project() -> IntersectionProject:
         analysis_period_h=0.25,
         lane_groups=groups,
         signal_heads=heads,
+        roundabout=roundabout,
         public_transport=TransitLineInput(
             name="Corredor Universidad (caso demostrativo)",
             route_length_km=12.0,

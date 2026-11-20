@@ -72,10 +72,10 @@ def validate_project(project: IntersectionProject) -> list[ValidationIssue]:
             )
         )
 
-    if project.branch_count not in {3, 4}:
+    if project.branch_count not in {2, 3, 4}:
         issues.append(
             ValidationIssue(
-                "error", "branch_count", "La intersección debe tener tres o cuatro ramales."
+                "error", "branch_count", "La intersección debe tener dos, tres o cuatro ramales."
             )
         )
     if len(project.branches) < project.branch_count:
@@ -87,10 +87,15 @@ def validate_project(project: IntersectionProject) -> list[ValidationIssue]:
     active_codes = [branch.code for branch in project.active_branches]
     if len(set(active_codes)) != len(active_codes):
         issues.append(ValidationIssue("error", "branches", "Las letras de ramal deben ser únicas."))
+    azimuths = [branch.azimuth for branch in project.active_branches]
+    if any(not 0 <= angle < 360 for angle in azimuths) or len(set(azimuths)) != len(azimuths):
+        issues.append(ValidationIssue(
+            "error", "branches", "Asigna azimuts distintos entre 0° y menos de 360°."
+        ))
     for branch in project.active_branches:
-        if not branch.code.strip() or not branch.name.strip():
+        if not branch.code.strip():
             issues.append(
-                ValidationIssue("error", "branches", "Cada ramal debe tener letra y nombre.")
+                ValidationIssue("error", "branches", "Cada ramal debe tener una letra.")
             )
         if branch.inbound_lanes < 1 or branch.outbound_lanes < 1:
             issues.append(
