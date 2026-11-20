@@ -2,6 +2,55 @@
 
 Todos los cambios relevantes de HCNet Transport se documentan en este archivo.
 
+## 3.2.0
+
+- Ventana adaptable, formularios desplazables y altura mínima para los campos de captura.
+- Inicio sin caso de ejemplo. La carga demostrativa se elige en el menú Proyecto.
+- Proyectos `.hcnet` con datos y estado de los módulos, incluido el plan semafórico.
+- Pestañas identificadas por relación entre cálculos y exportación LaTeX por módulo.
+- Intersecciones con dos a cuatro ramales y azimut editable.
+- Módulo independiente de rotondas de un carril con matriz OD, análisis operacional
+  y predimensionamiento geométrico.
+
+## [3.1.0] - 2026-11-20
+
+### Añadido
+
+- Apartado independiente de planeación de transporte público.
+- Velocidad comercial, tiempos por sentido y de ciclo, frecuencia y espera media.
+- Capacidad direccional, intervalo requerido, flota mínima y flota de reserva.
+- Tiempos de ascenso, descenso y permanencia para intercambio simultáneo o secuencial.
+- Espaciamiento y acceso peatonal, con óptimo aproximado y número recomendado de paradas.
+- Capacidad de la parada crítica y diagnóstico de cuellos de botella operacionales.
+- Balance oferta/demanda y efecto de la frecuencia sobre el flujo vial equivalente.
+- Comparación gráfica y tabular de funciones lineal, BPR, Davidson y exponencial.
+- Persistencia del módulo en el esquema 3 y resumen dentro del reporte LaTeX.
+
+### Cambiado
+
+- Navegación ampliada a ocho apartados y versión actualizada a 3.1.0.
+- Caso demostrativo ampliado con una línea hipotética de transporte público.
+
+## [3.0.0] - 2026-11-20
+
+### Añadido
+
+- Geometría configurable para intersecciones de tres o cuatro ramales.
+- Identificación A–D y carriles de entrada/salida por ramal.
+- Movimientos origen–destino asignables a carriles específicos y fases semafóricas.
+- Velocidad de flujo libre, longitud de aproximación y espaciamiento vehicular en cola.
+- Cola media, cola percentil 95 aproximada, longitud de cola y tiempo de viaje.
+- Inventario de semáforos por ubicación, tipo, fase y movimientos controlados.
+- Optimización de ciclo y reparto de verdes mediante el método de Webster.
+- Diagrama de bandas verde–amarillo–rojo por semáforo.
+- Persistencia y exportación de los nuevos datos en JSON, CSV y LaTeX.
+
+### Cambiado
+
+- Navegación reorganizada en siete apartados para separar geometría, movimientos y control.
+- Esquema de proyecto actualizado a la versión 2 con migración de archivos anteriores.
+- Caso demostrativo ampliado con ramales, fases y ocho grupos semafóricos.
+
 ## [2.0.0] - 2026-09-11
 
 ### Añadido
@@ -34,3 +83,5 @@ Todos los cambios relevantes de HCNet Transport se documentan en este archivo.
 
 [2.0.0]: https://github.com/VanLinux/hcnet-transport/releases/tag/v2.0.0
 [1.0.0]: https://github.com/VanLinux/hcnet-transport/releases/tag/v1.0.0
+[3.0.0]: https://github.com/VanLinux/hcnet-transport/releases/tag/v3.0.0
+[3.1.0]: https://github.com/VanLinux/hcnet-transport/releases/tag/v3.1.0
