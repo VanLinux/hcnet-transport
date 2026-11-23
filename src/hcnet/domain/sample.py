@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from hcnet.domain.models import IntersectionProject, LaneGroupInput, SignalHeadInput
+from hcnet.domain.models import (
+    IntersectionProject,
+    LaneGroupInput,
+    MovementInput,
+    PhaseInput,
+    SignalHeadInput,
+)
 from hcnet.domain.roundabout import RoundaboutInput
 from hcnet.domain.transit import TransitLineInput
 
@@ -139,6 +145,15 @@ def demonstration_project() -> IntersectionProject:
             **common,
         ),
     ]
+    phases = [PhaseInput(i, g, 3, 1) for i, g in enumerate((12, 31, 11, 30), 1)]
+    for group in groups:
+        group.effective_green_s = phases[group.signal_phase - 1].green
+        shares = (0.8, 0.2) if len(group.destination_branches) == 2 else (1,)
+        group.movements = tuple(
+            MovementInput(dest, round(group.volume_veh_h * fraction, 1),
+                          group.peak_hour_factor, group.heavy_vehicles_percent)
+            for dest, fraction in zip(group.destination_branches, shares, strict=True)
+        )
     heads = [
         SignalHeadInput(
             identifier=f"demo-s{index + 1}",
@@ -179,6 +194,7 @@ def demonstration_project() -> IntersectionProject:
         analysis_period_h=0.25,
         lane_groups=groups,
         signal_heads=heads,
+        phases=phases,
         roundabout=roundabout,
         public_transport=TransitLineInput(
             name="Corredor Universidad (caso demostrativo)",

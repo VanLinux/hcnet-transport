@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from html import escape
+from math import cos, radians, sin
 
 from hcnet import __version__
 from hcnet.domain.models import (
@@ -10,8 +11,11 @@ from hcnet.domain.models import (
     IntersectionResult,
     LaneGroupInput,
     LaneGroupResult,
+    SignalOptimizationResult,
 )
 from hcnet.domain.roundabout import ArmResult, RoundaboutArm, calculate_roundabout
+from hcnet.domain.scenarios import baseline_key, evaluate_scenario, scenario_project
+from hcnet.domain.signals import prepare_project, signal_rows, timeline
 from hcnet.domain.transit import calculate_transit_line
 
 
@@ -124,6 +128,8 @@ def calculation_trace_html(
 def latex_report(project: IntersectionProject, result: IntersectionResult) -> str:
     """Genera un reporte técnico autocontenido y compilable con PDFLaTeX."""
 
+    source_project = project
+    project = prepare_project(project)
     analyst = _latex_escape(project.analyst.strip() or "No especificado")
     project_name = _latex_escape(project.name.strip() or "Proyecto sin nombre")
     location = _latex_escape(project.location.strip() or "No especificada")
@@ -155,20 +161,27 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
             group_labels.get(item, item) for item in head.controlled_group_ids
         )
         signal_lines.append(
-            f"{_latex_escape(head.name)} & {_latex_escape(head.branch_code)} & "
+            f"{_latex_escape(head.name)} & {_latex_escape(head.control_group or head.name)} & "
+            f"{_latex_escape(head.branch_code)} & "
             f"{_latex_escape(head.signal_type)} & {head.signal_phase} & "
             f"{_latex_escape(controlled)} \\\\"
         )
-    signal_rows = "\n".join(signal_lines) or r"No configurados & --- & --- & --- & --- \\"
+    signal_rows = "\n".join(signal_lines) or r"No configurados & --- & --- & --- & --- & --- \\"
 
     warning_items = result.warnings or ("Sin advertencias automáticas.",)
     warnings = "\n".join(f"  \\item {_latex_escape(item)}" for item in warning_items)
 
     groups_by_id = {group.identifier: group for group in project.lane_groups}
     detail_sections = "\n".join(
-        _lane_group_latex(groups_by_id[row.identifier], row, project)
+        _lane_group_latex(groups_by_id[row.identifier], row)
         for row in result.lane_groups
     )
+    geometry_figure = _geometry_latex(project)
+    program = timeline(project)
+    original_timeline = _timeline_latex(project, program)
+    phase_figures = _phase_figures(project, program)
+    alternatives = _alternatives_latex(source_project, result)
+    movement_data = _movement_latex(project)
     optimization = project.signal_optimization
     plan = ""
     if optimization is not None:
@@ -177,14 +190,14 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
         )
         plan = f"Ciclo optimizado: {optimization.cycle_length_s:.1f} s. {phases}."
 
-    return rf"""\documentclass[11pt,a4paper]{{article}}
+    return rf"""\documentclass[11pt,letterpaper]{{article}}
 \usepackage[utf8]{{inputenc}}
 \usepackage[T1]{{fontenc}}
 \usepackage{{amsmath}}
 \usepackage{{booktabs}}
 \usepackage{{longtable}}
 \usepackage[table]{{xcolor}}
-\usepackage[a4paper,margin=2.2cm]{{geometry}}
+\usepackage[letterpaper,margin=2.2cm]{{geometry}}
 \usepackage[hidelinks]{{hyperref}}
 \usepackage{{fancyhdr}}
 
@@ -242,6 +255,7 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
 \end{{tabular}}
 
 \subsection{{Geometría por ramal}}
+{geometry_figure}
 \begin{{tabular}}{{llcrrr}}
 \toprule
 Letra & Ramal & Ubicación & Azimut ($^\circ$) & Entrada & Salida \\
@@ -249,6 +263,8 @@ Letra & Ramal & Ubicación & Azimut ($^\circ$) & Entrada & Salida \\
 {branch_rows}
 \bottomrule
 \end{{tabular}}
+
+{movement_data}
 
 \subsection{{Notas del proyecto}}
 {notes}
@@ -290,18 +306,28 @@ por fase: {project.signal_lost_time_s:.1f} s; verde mínimo: {project.minimum_gr
 amarillo: {project.yellow_time_s:.1f} s; todo rojo: {project.all_red_time_s:.1f} s.
 
 \small
-\begin{{longtable}}{{p{{3.0cm}}p{{1.1cm}}p{{3.0cm}}rp{{6.0cm}}}}
+\begin{{longtable}}{{p{{2.1cm}}p{{2.1cm}}lp{{2.8cm}}rp{{4.6cm}}}}
 \toprule
-Semáforo & Ramal & Tipo & Fase & Movimientos controlados \\
+Semáforo & Control & Ramal & Tipo & Fase & Movimientos controlados \\
 \midrule
 {signal_rows}
 \bottomrule
 \end{{longtable}}
 \normalsize
 {plan}
+{original_timeline}
+{phase_figures}
 
 \section{{Memoria de cálculo}}
+\[
+v=V/FHMD,\qquad c=s(g/C),\qquad X=v/c,\qquad d=d_1+d_2+d_3.
+\]
+$V$ es aforo observado, $s$ es flujo de saturación ajustado, $g$ es verde efectivo
+y $C$ es ciclo. $d_1$ representa demora uniforme, $d_2$ incremental y $d_3$ cola inicial.
+El LOS usa la demora de control y la cola P95 es un diagnóstico aproximado.
 {detail_sections}
+
+{alternatives}
 
 \section{{Diagnóstico automático}}
 \begin{{itemize}}
@@ -326,11 +352,12 @@ Software libre bajo GNU GPL v3.0}}
 
 
 def _module_latex(project: IntersectionProject, title: str, content: str) -> str:
-    return rf"""\documentclass[11pt,a4paper]{{article}}
+    return rf"""\documentclass[11pt,letterpaper]{{article}}
 \usepackage[utf8]{{inputenc}}
 \usepackage[T1]{{fontenc}}
 \usepackage[margin=2cm]{{geometry}}
 \usepackage{{booktabs,longtable,amsmath}}
+\usepackage{{xcolor}}
 \setlength{{\parindent}}{{0pt}}
 \begin{{document}}
 \section*{{HCNet Transport {__version__} · {title}}}
@@ -340,6 +367,237 @@ def _module_latex(project: IntersectionProject, title: str, content: str) -> str
 {content}
 \end{{document}}
 """
+
+
+def _movement_latex(project: IntersectionProject) -> str:
+    rows = []
+    for group in project.lane_groups:
+        for move in group.movements:
+            if move.enabled:
+                rows.append(
+                    rf"{group.origin_branch} $\rightarrow$ {move.destination} & {move.volume:g} & "
+                    f"{move.phf:g} & {move.heavy_percent:g} & F{group.signal_phase} & "
+                    + _latex_escape(move.operation) + r" \\"
+                )
+    if not rows:
+        return ""
+    return "\n".join([
+        r"\subsection{Aforos por movimiento}",
+        r"\begin{longtable}{lrrrrl}", r"\toprule",
+        r"Movimiento & Aforo (veh/h) & PHF & Pesados (\%) & Fase & Operación \\",
+        r"\midrule", *rows, r"\bottomrule", r"\end{longtable}",
+    ])
+
+
+def _geometry_latex(project: IntersectionProject, phase: int | None = None) -> str:
+    directions = {b.code: (sin(radians(b.azimuth)), cos(radians(b.azimuth)))
+                  for b in project.active_branches}
+
+    def point(code: str, radius: float, shift: float = 0) -> tuple[float, float]:
+        x, y = directions[code]
+        return 78 + x * radius + y * shift, 68 + y * radius - x * shift
+
+    def coordinates(p: tuple[float, float]) -> str:
+        return f"({p[0]:.2f},{p[1]:.2f})"
+
+    drawing = [r"\begin{center}\setlength{\unitlength}{1pt}\begin{picture}(156,137)"]
+    for code in directions:
+        end = coordinates(point(code, 48))
+        label = coordinates(point(code, 60))
+        drawing.extend([
+            rf"\qbezier(78,68){coordinates(point(code,25))}{end}",
+            rf"\put{label}{{\makebox(0,0){{{_latex_escape(code)}}}}}",
+        ])
+    for group in project.lane_groups:
+        if phase is not None and phase != group.signal_phase:
+            continue
+        for dest in group.destination_branches:
+            if group.origin_branch not in directions or dest not in directions:
+                continue
+            x, y = point(dest, 41, -5)
+            vx, vy = directions[dest]
+            origin = coordinates(point(group.origin_branch, 41, 5))
+            end = coordinates((x, y))
+            drawing.append(rf"{{\color{{blue!70!black}}\qbezier{origin}(78,68){end}")
+            for sign in (-1, 1):
+                wing = coordinates((x - vx*7 + sign*vy*4, y - vy*7 - sign*vx*4))
+                middle = coordinates((x - vx*3.5 + sign*vy*2, y - vy*3.5 - sign*vx*2))
+                drawing.append(rf"\qbezier{wing}{middle}{end}")
+            drawing.append("}")
+    drawing.append(r"\end{picture}\end{center}")
+    return "\n".join(drawing)
+
+
+def _timeline_latex(
+    project: IntersectionProject, program: SignalOptimizationResult | None,
+) -> str:
+    if program is None:
+        return "Los datos originales no describen un ciclo temporal completo."
+    headings = signal_rows(project, program)
+    chunks = []
+    phases = {p.phase_number: p for p in program.phases}
+    width = 250
+    for start_row in range(0, len(headings), 10):
+        rows = headings[start_row:start_row + 10]
+        height = 22 + 15*len(rows)
+        figure = [rf"\begin{{picture}}(414,{height})"]
+        for i, (name, phase) in enumerate(rows):
+            y = height - 15*(i + 1)
+            text = _latex_escape(name[:22])
+            figure.append(rf"\put(0,{y}){{\scriptsize {text} (F{phase})}}")
+            figure.append(rf"\put(132,{y}){{\color{{red!75!black}}\rule{{{width}pt}}{{8pt}}}}")
+            row = phases.get(phase)
+            if row is None:
+                continue
+            time = row.start_s
+            for duration, color in (
+                (row.green_s, "green!55!black"), (row.yellow_s, "yellow!80!orange"),
+                (row.all_red_s, "red!35!black"),
+            ):
+                x = 132 + width * time / program.cycle_length_s
+                span = width * duration / program.cycle_length_s
+                figure.append(
+                    rf"\put({x:.2f},{y}){{\color{{{color}}}\rule{{{span:.2f}pt}}{{8pt}}}}"
+                )
+                time += duration
+        for i in range(6):
+            x = 132 + i * width / 5
+            second = i * program.cycle_length_s / 5
+            figure.append(rf"\put({x:g},10){{\line(0,1){{5}}}}")
+            figure.append(rf"\put({x:g},0){{\scriptsize {second:.1f}}}")
+        figure.append(r"\end{picture}\par")
+        chunks.append("\n".join(figure))
+    return "\n".join(chunks) + "\n" + (
+        r"Tiempo (s). \textcolor{green!55!black}{Verde}, "
+        r"\textcolor{yellow!80!orange}{amarillo}, \textcolor{red!75!black}{rojo}, "
+        r"\textcolor{red!35!black}{todo rojo de la fase}.\par"
+    )
+
+
+def _phase_figures(
+    project: IntersectionProject, program: SignalOptimizationResult | None,
+) -> str:
+    if program is None:
+        return ""
+    figures = []
+    for phase in program.phases:
+        figures.append("\n".join([
+            r"\begin{minipage}{0.48\linewidth}\centering",
+            f"Fase {phase.phase_number} · Verde {phase.green_s:.2f} s",
+            _geometry_latex(project, phase.phase_number),
+            r"\end{minipage}",
+        ]))
+    pairs = ["\n".join(figures[i:i + 2]) for i in range(0, len(figures), 2)]
+    return "\n".join([r"\subsubsection*{Trayectorias activas por fase}", *[
+        pair + r"\par" for pair in pairs
+    ]])
+
+
+def _alternatives_latex(project: IntersectionProject, original: IntersectionResult) -> str:
+    key = baseline_key(project)
+    sections = []
+    for i, scenario in enumerate(project.scenarios, 1):
+        if scenario.baseline_key != key:
+            continue
+        result = evaluate_scenario(scenario)
+        configured = scenario_project(scenario)
+        controls = scenario.settings
+        rows = []
+        bars = []
+        for label, old, new in (
+            ("Ciclo (s)", project.cycle_length_s, scenario.plan.cycle_length_s),
+            ("Demora (s/veh)", original.weighted_control_delay_s_veh,
+             result.weighted_control_delay_s_veh),
+            ("Cola P95 máxima (m)", original.maximum_queue_95_m, result.maximum_queue_95_m),
+            ("v/c crítico", original.critical_degree_of_saturation,
+             result.critical_degree_of_saturation),
+            ("Capacidad sumada (veh/h)", sum(r.capacity_veh_h for r in original.lane_groups),
+             sum(r.capacity_veh_h for r in result.lane_groups)),
+        ):
+            difference = new - old
+            percentage = f"{difference/old:+.1%}".replace("%", r"\%") if old else "---"
+            rows.append(
+                f"{label} & {old:.2f} & {new:.2f} & {difference:+.2f} & {percentage} " + r"\\"
+            )
+            if label in ("Demora (s/veh)", "Cola P95 máxima (m)", "v/c crítico"):
+                scale = 110 / max(old, new, 1e-9)
+                bars.append(
+                    rf"{label} & \textcolor{{gray}}{{\rule{{{old*scale:.2f}pt}}{{5pt}}}} "
+                    rf"& \textcolor{{blue!70!black}}{{\rule{{{new*scale:.2f}pt}}{{5pt}}}} \\"
+                )
+        rows.append(f"LOS & {original.level_of_service} & {result.level_of_service} & -- & -- "
+                    + r"\\")
+        original_rows = {r.identifier: r for r in original.lane_groups}
+        group_rows = []
+        for g, row in zip(configured.lane_groups, result.lane_groups, strict=True):
+            delta = row.control_delay_s_veh - original_rows[g.identifier].control_delay_s_veh
+            group_rows.append(
+                f"{_latex_escape(g.label)} & {g.signal_phase} & {g.effective_green_s:.2f} & "
+                f"{row.capacity_veh_h:.1f} & {row.degree_of_saturation:.3f} & "
+                f"{row.control_delay_s_veh:.1f} & {delta:+.1f} & {row.queue_95_m:.1f} & "
+                f"{row.level_of_service} "
+                + r"\\"
+            )
+        phases = ", ".join(
+            f"F{p.phase_number}: {p.green_s:.2f}/{p.yellow_s:.2f}/{p.all_red_s:.2f} s"
+            for p in scenario.plan.phases
+        )
+        objective = (
+            "Reparto por relaciones críticas" if scenario.plan.method == "Webster" else
+            "Demora, cola y saturación" if "Pareto" in scenario.plan.method
+            else controls["objective"]
+        )
+        conclusion = result.weighted_control_delay_s_veh - original.weighted_control_delay_s_veh
+        obs = _latex_escape(str(controls.get("termination", "")))
+        sections.extend([
+            rf"\subsection{{Escenario {i}: {_latex_escape(scenario.name)}}}",
+            f"Objetivo: {_latex_escape(objective)}. "
+            f"Ciclo permitido: {controls['min_cycle']} a {controls['max_cycle']} s. "
+            f"Verde mínimo: {configured.minimum_green_s:g} s. "
+            f"Semilla: {controls['seed']}. Evaluaciones: {controls['evaluations']}. {obs}.",
+            f"Población {controls['population']}, iteraciones {controls['iterations']}, "
+            f"límite {controls['generations']} y paciencia {controls['patience']}. "
+            f"Reasignación: {'sí' if controls['regroup'] else 'no'}. "
+            f"Ciclo fijo: {'sí' if controls['fixed_cycle'] else 'no'}.",
+            "Intervalos verde/amarillo/todo rojo: " + phases + r"\par",
+            r"\begin{tabular}{lrrrr}\toprule",
+            r"Indicador & Actual & Alternativa & Cambio & Cambio (\%) \\ \midrule",
+            *rows, r"\bottomrule\end{tabular}\par",
+            r"\small\begin{longtable}{lrrrrrrrr}\toprule",
+            r"Grupo & Fase & Verde (s) & Cap. & $v/c$ & Demora & $\Delta$ demora & P95 (m) & LOS"
+            r" \\ ",
+            r"\midrule", *group_rows, r"\bottomrule\end{longtable}\normalsize",
+            r"\begin{tabular}{lll}\toprule Indicador & Actual & Alternativa \\ \midrule",
+            *bars, r"\bottomrule\end{tabular}\par",
+            _timeline_latex(configured, scenario.plan),
+            _phase_figures(configured, scenario.plan) if controls["regroup"] else "",
+            f"Cambio de demora global: {conclusion:+.2f} s/veh. "
+            f"El v/c crítico pasa de {original.critical_degree_of_saturation:.3f} a "
+            f"{result.critical_degree_of_saturation:.3f}. "
+            "Los indicadores se comparan con el mismo motor operacional de HCNet.",
+        ])
+    return "\n".join([r"\section{Optimización y comparación}", *sections]) if sections else ""
+
+
+def general_latex(project: IntersectionProject) -> str:
+    modules = set(project.calculated_modules)
+    if not modules & {"intersection", "roundabout", "transit"}:
+        raise ValueError("Calcula un módulo antes de generar el informe general.")
+    sections = []
+    if "transit" in modules:
+        sections.append(_transit_latex(project))
+    if "roundabout" in modules:
+        body = roundabout_latex(project).split(r"\subsection*", 1)[1]
+        sections.append(r"\section{Rotondas}" + r"\subsection*" + body.rsplit(
+            r"\end{document}", 1
+        )[0])
+    content = "\n".join(sections)
+    if "intersection" in modules:
+        from hcnet.domain.calculations import calculate_intersection
+
+        report = latex_report(project, calculate_intersection(project))
+        return report.rsplit(r"\end{document}", 1)[0] + content + r"\end{document}"
+    return _module_latex(project, "Informe general", content)
 
 
 def transit_latex(project: IntersectionProject) -> str:
@@ -500,81 +758,26 @@ La geometría es preliminar.
 def _lane_group_latex(
     source: LaneGroupInput,
     result: LaneGroupResult,
-    project: IntersectionProject,
 ) -> str:
     f = result.factors
-    green_ratio = source.effective_green_s / project.cycle_length_s
-    warning_items = result.warnings or ("Sin advertencias para este grupo.",)
-    warnings = "\n".join(f"  \\item {_latex_escape(item)}" for item in warning_items)
-
     return rf"""
 \subsection{{{_latex_escape(result.label)}}}
+Fase {source.signal_phase}, verde {source.effective_green_s:.2f} s.
+Aforo {source.volume_veh_h:.1f} veh/h; FHMD equivalente {source.peak_hour_factor:.3f};
+pesados {source.heavy_vehicles_percent:.1f}\%.
+$s_0={source.base_saturation_flow_pc_h_ln:.0f}$ pc/h/carril;
+$N={source.lanes}$; $s={result.saturation_flow_veh_h:.1f}$ veh/h.
 
-\begin{{tabular}}{{@{{}}ll@{{}}}}
-  Recorrido & {_latex_escape(source.origin_branch)} $\rightarrow$
-    {_latex_escape('/'.join(source.destination_branches))} \\
-  Carriles asignados & {_latex_escape(', '.join(str(item) for item in source.lane_indices))} \\
-  Fase semafórica & {source.signal_phase} \\
-  Volumen observado, $V$ & {source.volume_veh_h:.1f} veh/h \\
-  Número de carriles, $N$ & {source.lanes} \\
-  Verde efectivo, $g$ & {source.effective_green_s:.1f} s \\
-  Factor de hora de máxima demanda, FHMD & {source.peak_hour_factor:.3f} \\
-  Flujo de saturación base, $s_0$ &
-    {source.base_saturation_flow_pc_h_ln:.1f} pc/h/carril \\
-\end{{tabular}}
+$f_w={f.lane_width:.3f}$, $f_{{HV}}={f.heavy_vehicles:.3f}$, $f_g={f.grade:.3f}$,
+$f_p={f.parking:.3f}$, $f_{{bb}}={f.bus_blockage:.3f}$,
+$f_{{LU}}={f.lane_utilization:.3f}$, $f_a={f.area_type:.3f}$,
+$f_{{turn}}={f.turn:.3f}$. El flujo ajustado usa $s=s_0N\prod f_i$.
 
-\[
-v=\frac{{V}}{{FHMD}}
-=\frac{{{source.volume_veh_h:.2f}}}{{{source.peak_hour_factor:.3f}}}
-={result.demand_flow_rate_veh_h:.2f}\ \mathrm{{veh/h}}
-\]
-
-\begin{{center}}
-\begin{{tabular}}{{lrrrrrrrrr}}
-\toprule
-Factor & $f_w$ & $f_{{HV}}$ & $f_g$ & $f_p$ & $f_{{bb}}$ &
-$f_{{LU}}$ & $f_a$ & $f_{{turn}}$ & $\prod f$ \\
-\midrule
-Valor & {f.lane_width:.4f} & {f.heavy_vehicles:.4f} & {f.grade:.4f} &
-{f.parking:.4f} & {f.bus_blockage:.4f} & {f.lane_utilization:.4f} &
-{f.area_type:.4f} & {f.turn:.4f} & {f.product:.4f} \\
-\bottomrule
-\end{{tabular}}
-\end{{center}}
-
-\begin{{align*}}
-s &= s_0 N \prod f
- = {source.base_saturation_flow_pc_h_ln:.2f}({source.lanes})({f.product:.4f})
- = {result.saturation_flow_veh_h:.2f}\ \mathrm{{veh/h}},\\
-\frac{{g}}{{C}} &= \frac{{{source.effective_green_s:.2f}}}
-{{{project.cycle_length_s:.2f}}} = {green_ratio:.4f},\\
-c &= s\frac{{g}}{{C}} = {result.capacity_veh_h:.2f}\ \mathrm{{veh/h}},\\
-X &= \frac{{v}}{{c}} = {result.degree_of_saturation:.4f}.
-\end{{align*}}
-
-\begin{{align*}}
-d_1 &= {result.uniform_delay_s_veh:.2f}\ \mathrm{{s/veh}},\\
-d_2 &= {result.incremental_delay_s_veh:.2f}\ \mathrm{{s/veh}},\\
-d_3 &= {result.initial_queue_delay_s_veh:.2f}\ \mathrm{{s/veh}},\\
-d &= d_1+d_2+d_3 = {result.control_delay_s_veh:.2f}\ \mathrm{{s/veh}}.
-\end{{align*}}
-
-\textbf{{Resultado:}} LOS {result.level_of_service}. Llegadas durante el rojo:
-{result.red_arrivals_veh_cycle:.2f} veh/ciclo; demanda residual:
-{result.residual_demand_veh:.2f} veh.
-
-\begin{{align*}}
-Q_{{media}} &= R + 0.5q_{{rojo}} = {result.average_queue_veh:.2f}\ \mathrm{{veh}},\\
-Q_{{95}} &\approx R+q_{{rojo}}+1.645\sqrt{{q_{{rojo}}}}
- = {result.queue_95_veh:.2f}\ \mathrm{{veh}},\\
-L_{{95}} &= \frac{{Q_{{95}}}}{{N}}e = {result.queue_95_m:.2f}\ \mathrm{{m}},\\
-t_0 &= \frac{{3.6L}}{{VFL}} = {result.free_flow_travel_time_s:.2f}\ \mathrm{{s}},\\
-t_{{viaje}} &= t_0+d = {result.travel_time_s:.2f}\ \mathrm{{s}}.
-\end{{align*}}
-
-\begin{{itemize}}
-{warnings}
-\end{{itemize}}
+$d_1={result.uniform_delay_s_veh:.2f}$, $d_2={result.incremental_delay_s_veh:.2f}$ y
+$d_3={result.initial_queue_delay_s_veh:.2f}$ s/veh.
+$Q_{{95}}\approx R+q_{{rojo}}+1.645\sqrt{{q_{{rojo}}}}$,
+con residual $R={result.residual_demand_veh:.2f}$ veh y llegadas en rojo
+$q_{{rojo}}={result.red_arrivals_veh_cycle:.2f}$ veh/ciclo.
 """
 
 

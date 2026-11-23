@@ -5,33 +5,55 @@ from __future__ import annotations
 from collections import defaultdict
 from math import cos, radians, sin
 
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from hcnet.domain.models import IntersectionProject, IntersectionResult, SignalOptimizationResult
+from hcnet.domain.signals import signal_rows
 from hcnet.domain.transit import TransitLineInput, TransitLineResult, congestion_time
-from hcnet.ui.styles import COLORS, LOS_COLORS
+from hcnet.ui.styles import COLORS, LOS_COLORS, chart_color
 
 
 class IntersectionSketch(QWidget):
     """Esquema orientativo que resume volumen por acceso."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    branch_clicked = Signal(str)
+
+    def __init__(self, parent: QWidget | None = None, *, compact: bool = False) -> None:
         super().__init__(parent)
         self._project: IntersectionProject | None = None
-        self.setMinimumSize(310, 310)
+        self.compact = compact
+        self.active_phase: int | None = None
+        self.interactive = False
+        self.setMinimumSize(120 if compact else 220, 115 if compact else 215)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def set_project(self, project: IntersectionProject) -> None:
         self._project = project
         self.update()
 
+    def mousePressEvent(self, event) -> None:  # noqa: N802, ANN001
+        if not self.interactive or not self._project or event.button() != Qt.MouseButton.LeftButton:
+            super().mousePressEvent(event)
+            return
+        size = min(self.width(), self.height())
+        center = QPointF(self.width() / 2, self.height() / 2)
+        point = event.position() - center
+        for branch in self._project.active_branches:
+            angle = radians(branch.azimuth)
+            x, y = sin(angle), -cos(angle)
+            along = point.x() * x + point.y() * y
+            across = point.x() * y - point.y() * x
+            if size * 0.14 < along < size * 0.58 and abs(across) < size * 0.13:
+                self.branch_clicked.emit(branch.code)
+                return
+
     def paintEvent(self, event) -> None:  # noqa: N802, ANN001
         del event
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#FFFFFF"))
+        painter.fillRect(self.rect(), chart_color(self, QPalette.ColorRole.Base))
 
         width = self.width()
         height = self.height()
@@ -47,11 +69,18 @@ class IntersectionSketch(QWidget):
         for direction in ends:
             painter.setPen(QPen(QColor("#43545D"), road))
             painter.drawLine(center, center + direction * (size * 0.32))
-        for direction in ends:
-            painter.setPen(QPen(QColor("#D5D7DA"), 2, Qt.PenStyle.DashLine))
-            painter.drawLine(
-                center + direction * (road * 0.65), center + direction * (size * 0.32)
-            )
+        for branch, direction in zip(branches, ends, strict=True):
+            transverse = QPointF(direction.y(), -direction.x())
+            lanes = branch.inbound_lanes + branch.outbound_lanes
+            for lane in range(1, lanes):
+                median = lane == branch.outbound_lanes
+                painter.setPen(QPen(QColor("#D5D7DA"), 1 if not median else 2,
+                                    Qt.PenStyle.SolidLine if median else Qt.PenStyle.DashLine))
+                offset = transverse * (road * (lane / lanes - 0.5))
+                painter.drawLine(
+                    center + direction * (road * 0.78) + offset,
+                    center + direction * (size * 0.32) + offset,
+                )
 
         totals: defaultdict[str, float] = defaultdict(float)
         if self._project is not None:
@@ -59,7 +88,7 @@ class IntersectionSketch(QWidget):
                 totals[group.origin_branch] += group.volume_veh_h
 
         painter.setFont(QFont(painter.font().family(), 9, QFont.Weight.DemiBold))
-        painter.setPen(QColor(COLORS["navy"]))
+        painter.setPen(chart_color(self))
         for branch, direction in zip(branches, ends, strict=True):
             label_x = min(width - 140, max(0, cx + direction.x() * size * 0.44 - 70))
             label_y = min(height - 38, max(0, cy + direction.y() * size * 0.44 - 19))
@@ -71,14 +100,55 @@ class IntersectionSketch(QWidget):
                 if value
                 else f"{branch.label}\n{branch.inbound_lanes} carriles"
             )
-            painter.drawText(rectangle, Qt.AlignmentFlag.AlignCenter, text)
+            if self.compact:
+                painter.drawText(
+                    QRectF(cx + direction.x()*size*0.42 - 12, label_y, 24, 38),
+                    Qt.AlignmentFlag.AlignCenter, branch.code,
+                )
+            else:
+                painter.drawText(rectangle, Qt.AlignmentFlag.AlignCenter, text)
 
-        painter.setBrush(QColor(COLORS["cyan"]))
-        painter.setPen(QPen(QColor("#FFFFFF"), 2))
-        painter.drawEllipse(QRectF(cx - 28, cy - 28, 56, 56))
-        painter.setPen(QColor("#FFFFFF"))
-        painter.setFont(QFont(painter.font().family(), 10, QFont.Weight.Bold))
-        painter.drawText(QRectF(cx - 28, cy - 28, 56, 56), Qt.AlignmentFlag.AlignCenter, "HC")
+        if self._project is None:
+            return
+        directions = dict(zip((branch.code for branch in branches), ends, strict=True))
+        for group in self._project.lane_groups:
+            if self.active_phase is not None and group.signal_phase != self.active_phase:
+                continue
+            origin = directions.get(group.origin_branch)
+            if origin is None:
+                continue
+            destinations = (
+                tuple(m.destination for m in group.movements if m.enabled)
+                if group.movements else group.destination_branches
+            )
+            for code in destinations:
+                dest = directions.get(code)
+                if dest is None:
+                    continue
+                beginning = center + origin * (size * 0.28)
+                target = center + dest * (size * 0.26)
+                beginning += QPointF(origin.y(), -origin.x()) * (road * 0.22)
+                target += QPointF(-dest.y(), dest.x()) * (road * 0.22)
+                path = QPainterPath(beginning)
+                path.quadTo(center, target)
+                painter.setPen(QPen(QColor("#50D69D" if self.active_phase else "#7DD3FC"), 2))
+                painter.drawPath(path)
+                tangent = target - center
+                length = max(1, (tangent.x()**2 + tangent.y()**2)**0.5)
+                tangent = tangent / length
+                wing = QPointF(-tangent.y(), tangent.x()) * 4
+                painter.drawLine(target, target - tangent*8 + wing)
+                painter.drawLine(target, target - tangent*8 - wing)
+        if not self.compact:
+            for head in self._project.signal_heads:
+                direction = directions.get(head.branch_code)
+                if direction is not None:
+                    dot = center + direction * (size * 0.17)
+                    dot += QPointF(direction.y(), -direction.x()) * (road * 0.66)
+                    painter.setBrush(QColor("#18864B" if self.active_phase == head.signal_phase
+                                            else "#B3261E" if self.active_phase else "#8BA5C4"))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.drawEllipse(dot, 4, 4)
 
 
 class SaturationChart(QWidget):
@@ -101,10 +171,10 @@ class SaturationChart(QWidget):
         del event
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#FFFFFF"))
+        painter.fillRect(self.rect(), chart_color(self, QPalette.ColorRole.Base))
 
         if self._result is None:
-            painter.setPen(QColor(COLORS["muted"]))
+            painter.setPen(chart_color(self))
             painter.drawText(
                 self.rect(),
                 Qt.AlignmentFlag.AlignCenter,
@@ -121,7 +191,7 @@ class SaturationChart(QWidget):
         scale_max = max(1.2, largest_degree * 1.08)
 
         painter.setFont(QFont(painter.font().family(), 8))
-        painter.setPen(QColor(COLORS["muted"]))
+        painter.setPen(chart_color(self))
         for tick in (0.0, 0.5, 0.9, 1.0, scale_max):
             x = left + available * tick / scale_max
             painter.drawLine(int(x), top - 5, int(x), self.height() - 12)
@@ -133,7 +203,7 @@ class SaturationChart(QWidget):
 
         for index, row in enumerate(self._result.lane_groups):
             y = top + index * row_height
-            painter.setPen(QColor(COLORS["ink"]))
+            painter.setPen(chart_color(self))
             label = row.label if len(row.label) <= 25 else row.label[:23] + "…"
             painter.drawText(QRectF(8, y, left - 16, 18), Qt.AlignmentFlag.AlignVCenter, label)
 
@@ -143,7 +213,7 @@ class SaturationChart(QWidget):
             painter.setBrush(QColor(color))
             painter.drawRoundedRect(QRectF(left, y + 3, bar_width, 12), 4, 4)
 
-            painter.setPen(QColor(COLORS["ink"]))
+            painter.setPen(chart_color(self))
             painter.drawText(
                 QRectF(left + bar_width + 6, y, right - 5, 18),
                 Qt.AlignmentFlag.AlignVCenter,
@@ -158,6 +228,8 @@ class SignalTimingDiagram(QWidget):
         super().__init__(parent)
         self._project: IntersectionProject | None = None
         self._optimization: SignalOptimizationResult | None = None
+        self._cycles = 1
+        self._cursor: float | None = None
         self.setMinimumHeight(240)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
 
@@ -168,78 +240,100 @@ class SignalTimingDiagram(QWidget):
     ) -> None:
         self._project = project
         self._optimization = optimization
-        rows = max(3, len(project.signal_heads))
+        rows = max(3, len(signal_rows(project, optimization)) if optimization else 0)
         self.setMinimumHeight(72 + rows * 32)
         self.updateGeometry()
+        self.update()
+
+    def set_cycles(self, cycles: int) -> None:
+        self._cycles = cycles
+        self.update()
+
+    def set_cursor(self, cursor: float | None) -> None:
+        self._cursor = cursor
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802, ANN001
         del event
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#FFFFFF"))
+        painter.fillRect(self.rect(), chart_color(self, QPalette.ColorRole.Base))
 
         if self._project is None or self._optimization is None:
-            painter.setPen(QColor(COLORS["muted"]))
+            painter.setPen(chart_color(self))
             painter.drawText(
                 self.rect(),
                 Qt.AlignmentFlag.AlignCenter,
-                "Optimiza el plan para generar el diagrama de bandas",
+                "Define un programa válido para ver sus bandas",
             )
             return
 
         cycle = self._optimization.cycle_length_s
-        left, right, top = 190.0, 28.0, 42.0
+        total = cycle * self._cycles
+        left, right, top = min(170.0, self.width() * 0.29), 24.0, 42.0
         available = max(120.0, self.width() - left - right)
         row_height = 32.0
 
         painter.setFont(QFont(painter.font().family(), 8))
-        painter.setPen(QColor(COLORS["muted"]))
-        tick_step = 10 if cycle <= 120 else 20
-        for second in range(0, int(cycle) + 1, tick_step):
-            x = left + available * second / cycle
+        painter.setPen(chart_color(self))
+        tick_step = max(1, int(total / max(3, available // 50)))
+        for second in range(0, int(total) + 1, tick_step):
+            x = left + available * second / total
             painter.drawLine(int(x), int(top - 8), int(x), self.height() - 15)
             painter.drawText(QRectF(x - 18, 8, 36, 18), Qt.AlignmentFlag.AlignCenter, str(second))
         painter.drawText(
             QRectF(left, 25, available, 16),
             Qt.AlignmentFlag.AlignCenter,
-            f"Tiempo dentro del ciclo (s) · C = {cycle:.0f} s",
+            f"Tiempo (s) · C = {cycle:g} s",
         )
 
         phase_by_number = {phase.phase_number: phase for phase in self._optimization.phases}
-        for row, head in enumerate(self._project.signal_heads):
+        heads = signal_rows(self._project, self._optimization)
+        for row, (name, number) in enumerate(heads):
             y = top + row * row_height
-            label = f"{head.name} · {head.branch_code} · F{head.signal_phase}"
-            if len(label) > 29:
-                label = label[:27] + "…"
-            painter.setPen(QColor(COLORS["ink"]))
+            label = painter.fontMetrics().elidedText(
+                f"{name} · F{number}", Qt.TextElideMode.ElideRight, int(left - 14),
+            )
+            painter.setPen(chart_color(self))
             painter.drawText(QRectF(6, y, left - 14, 24), Qt.AlignmentFlag.AlignVCenter, label)
 
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor("#B3261E"))
             painter.drawRoundedRect(QRectF(left, y + 3, available, 18), 3, 3)
 
-            phase = phase_by_number.get(head.signal_phase)
+            phase = phase_by_number.get(number)
             if phase is None:
                 continue
-            green_x = left + available * phase.start_s / cycle
-            green_width = available * phase.green_s / cycle
-            yellow_width = available * phase.yellow_s / cycle
-            painter.setBrush(QColor("#18864B"))
-            painter.drawRect(QRectF(green_x, y + 3, green_width, 18))
-            painter.setBrush(QColor("#E3A008"))
-            painter.drawRect(QRectF(green_x + green_width, y + 3, yellow_width, 18))
+            for repeat in range(self._cycles):
+                green_x = left + available * (cycle * repeat + phase.start_s) / total
+                green_width = available * phase.green_s / total
+                yellow_width = available * phase.yellow_s / total
+                painter.setBrush(QColor("#18864B"))
+                painter.drawRect(QRectF(green_x, y + 3, green_width, 18))
+                painter.setBrush(QColor("#E3A008"))
+                painter.drawRect(QRectF(green_x + green_width, y + 3, yellow_width, 18))
+                red_x = green_x + green_width + yellow_width
+                painter.setBrush(QColor("#720E17"))
+                painter.drawRect(QRectF(red_x, y + 3, available * phase.all_red_s / total, 18))
+
+        if self._cursor is not None:
+            x = round(left + available * self._cursor / total)
+            painter.setPen(QPen(QColor("#58B8E9"), 2))
+            painter.drawLine(x, int(top), x, self.height() - 25)
 
         legend_y = self.height() - 18
-        legend = (("Verde", "#18864B"), ("Amarillo", "#E3A008"), ("Rojo", "#B3261E"))
-        x = left
+        legend = (
+            ("Verde", "#18864B"), ("Amarillo", "#E3A008"), ("Rojo", "#B3261E"),
+            ("Todo rojo", "#720E17"),
+        )
+        x = 6
         for label, color in legend:
             painter.setBrush(QColor(color))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawRect(QRectF(x, legend_y, 16, 10))
-            painter.setPen(QColor(COLORS["ink"]))
+            painter.setPen(chart_color(self))
             painter.drawText(QRectF(x + 21, legend_y - 4, 70, 18), label)
-            x += 92
+            x += 68
 
 
 class TransitCongestionChart(QWidget):
@@ -272,9 +366,9 @@ class TransitCongestionChart(QWidget):
         del event
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#FFFFFF"))
+        painter.fillRect(self.rect(), chart_color(self, QPalette.ColorRole.Base))
         if self._data is None or self._result is None:
-            painter.setPen(QColor(COLORS["muted"]))
+            painter.setPen(chart_color(self))
             painter.drawText(
                 self.rect(), Qt.AlignmentFlag.AlignCenter, "Calcula la línea para comparar modelos"
             )
@@ -292,31 +386,32 @@ class TransitCongestionChart(QWidget):
         y_max = max(y_max, t0 * 1.5)
 
         painter.setFont(QFont(painter.font().family(), 8))
-        painter.setPen(QPen(QColor("#DADCE0"), 1))
+        grid_color = chart_color(self, QPalette.ColorRole.Mid)
+        painter.setPen(QPen(grid_color, 1))
         for index in range(6):
             x_value = 1.5 * index / 5
             x = left + width * x_value / 1.5
             painter.drawLine(int(x), int(top), int(x), int(top + height))
-            painter.setPen(QColor(COLORS["muted"]))
+            painter.setPen(chart_color(self))
             painter.drawText(
                 QRectF(x - 18, top + height + 6, 36, 16),
                 Qt.AlignmentFlag.AlignCenter,
                 f"{x_value:.1f}",
             )
-            painter.setPen(QPen(QColor("#DADCE0"), 1))
+            painter.setPen(QPen(grid_color, 1))
         for index in range(5):
             value = y_max * index / 4
             y = top + height - height * value / y_max
             painter.drawLine(int(left), int(y), int(left + width), int(y))
-            painter.setPen(QColor(COLORS["muted"]))
+            painter.setPen(chart_color(self))
             painter.drawText(
                 QRectF(2, y - 8, left - 9, 16),
                 Qt.AlignmentFlag.AlignRight,
                 f"{value:.0f}",
             )
-            painter.setPen(QPen(QColor("#DADCE0"), 1))
+            painter.setPen(QPen(grid_color, 1))
 
-        painter.setPen(QColor(COLORS["ink"]))
+        painter.setPen(chart_color(self))
         painter.drawText(
             QRectF(left, self.height() - 22, width, 18),
             Qt.AlignmentFlag.AlignCenter,
@@ -355,7 +450,7 @@ class TransitCongestionChart(QWidget):
             painter.drawPath(path)
 
         current_x = left + width * min(self._result.road_degree_of_saturation, 1.5) / 1.5
-        painter.setPen(QPen(QColor(COLORS["ink"]), 1.5, Qt.PenStyle.DashLine))
+        painter.setPen(QPen(chart_color(self), 1.5, Qt.PenStyle.DashLine))
         painter.drawLine(int(current_x), int(top), int(current_x), int(top + height))
         painter.restore()
 
@@ -363,10 +458,10 @@ class TransitCongestionChart(QWidget):
         for model, color in self.MODELS:
             painter.setPen(QPen(QColor(color), 3))
             painter.drawLine(int(legend_x), 18, int(legend_x + 18), 18)
-            painter.setPen(QColor(COLORS["ink"]))
+            painter.setPen(chart_color(self))
             painter.drawText(QRectF(legend_x + 23, 9, 78, 18), Qt.AlignmentFlag.AlignVCenter, model)
             legend_x += 105
-        painter.setPen(QColor(COLORS["muted"]))
+        painter.setPen(chart_color(self))
         painter.drawText(
             QRectF(max(left, self.width() - 185), 9, 165, 18),
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,

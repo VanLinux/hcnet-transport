@@ -8,15 +8,16 @@ Manual* (HCM).
 
 [![Pruebas](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml/badge.svg)](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml)
 [![Licencia: GPL v3](https://img.shields.io/badge/Licencia-GPLv3-blue.svg)](LICENSE)
-[![Versión](https://img.shields.io/badge/versión-3.2.0-3f444b.svg)](CHANGELOG.md)
+[![Versión](https://img.shields.io/badge/versión-3.3.0-3f444b.svg)](CHANGELOG.md)
 
-## Versión 3.2
+## Versión 3.3
 
 HCNet Transport analiza **intersecciones semaforizadas aisladas de dos, tres o cuatro
 ramales con control de tiempo fijo**. Cada ramal tiene azimut editable. La geometría
 se describe con letras A–D y cada
 movimiento se captura como un recorrido origen–destino, por ejemplo `A → C`, asignado
-a carriles y fases concretas.
+a carriles y fases concretas. Captura aforo, PHF y porcentaje de pesados por
+movimiento. Configura la geometría y las fases desde esquemas interactivos.
 
 Calcula, por grupo de carriles:
 
@@ -34,12 +35,15 @@ También proporciona:
 
 - resumen ponderado de la intersección;
 - gráfica comparativa del grado de saturación;
-- inventario de semáforos por ramal, tipo, fase y movimientos controlados;
-- optimización de ciclo y reparto de verdes con el método de Webster;
-- diagrama de bandas verde–amarillo–rojo por semáforo;
+- inventario de semáforos por ramal, tipo, grupo de control, fase y movimientos;
+- tarjetas de fase con orden, verdes, amarillos y todo rojo;
+- optimización con Webster, Akçelik con búsqueda directa, algoritmo genético o Pareto;
+- reasignación de grupos compatibles en Genético y Pareto, con bloqueos configurables;
+- bandas por grupo de control con escala en segundos, reproducción y hasta tres ciclos;
+- comparación de alternativas frente a la evaluación original, que permanece archivada;
 - memoria de cálculo con ecuaciones y sustituciones;
 - validación de entradas y advertencias operacionales;
-- proyectos editables en JSON, resultados CSV y reporte técnico en LaTeX;
+- proyectos `.hcnet`, resultados CSV e informes LaTeX en tamaño carta;
 - caso demostrativo hipotético de Ciudad de México.
 
 ### Transporte público
@@ -60,13 +64,12 @@ infraestructura de parada para una línea bidireccional. Calcula:
 - comparación gráfica y tabular de funciones lineal, BPR, Davidson y exponencial.
 
 La lógica toma como referencia conceptual la separación entre demanda, oferta
-operativa e infraestructura utilizada por modelos integrados como TRANUS. HCNet 3.1
-no realiza asignación de red, modelación de uso de suelo, transbordos ni equilibrio
-multimodal.
+operativa e infraestructura utilizada por modelos integrados como TRANUS. El módulo
+evalúa una línea por vez.
 
-La interfaz separa proyecto, geometría, movimientos, semaforización, resultados y
-reporte técnico. `↔` indica pestañas del análisis compartido de intersecciones y
-`◇` indica módulos independientes con reporte propio.
+El selector superior cambia entre los módulos. Los divisores ajustables redistribuyen
+el espacio entre captura, esquema, resumen y resultados. El menú **Ver** cambia el tema.
+`↔` indica pestañas vinculadas y `◇` indica módulos independientes con reporte propio.
 
 ### Rotondas
 
@@ -77,21 +80,34 @@ Incluye un esquema y calcula radios de trayectoria por cuerda y flecha, radios
 de isla y anillo, velocidad teórica y distancia de parada. La geometría es de
 predimensionamiento. Véase [la metodología](docs/METHODOLOGY.md#14-rotondas).
 
+## Actualizar y ejecutar en Fedora
+
+Desde la carpeta del repositorio, con Python 3.11 o superior:
+
+```bash
+git switch main
+git pull --ff-only
+python3 -m venv .venv  # Solo la primera vez
+.venv/bin/python -m pip install -e .
+.venv/bin/hcnet
+```
+
 ## Uso básico
 
-1. Revisa la presentación y las limitaciones en **Inicio y alcance**.
-2. Define nombre, ubicación, analista, ciclo y periodo de análisis en **Proyecto**.
-3. Define dos, tres o cuatro ramales, sus carriles y azimuts en **Geometría**.
-4. Captura recorridos A–D, carriles, demanda y fase en **Movimientos y carriles**.
-5. Configura los semáforos y ejecuta **Optimizar y aplicar** si deseas usar Webster.
-6. Captura servicio, demanda, paradas y oferta vial en **Transporte público**.
-7. Presiona **Calcular línea** para dimensionar la operación y comparar congestión.
-8. Presiona **Calcular proyecto** o `F5` para calcular el módulo de la pestaña activa.
-9. Examina LOS, demora, colas y tiempo de viaje en **Resultados intersección**.
-10. Exporta la intersección en **Reporte técnico**. **Rotondas** y **Transporte público**
-    tienen su propio botón de exportación.
-11. Guarda el proyecto como `*.hcnet`. Conserva datos, plan semafórico aplicado y el estado
-    de cálculo de los tres módulos. **Abrir** también acepta proyectos `*.hcnet.json`.
+1. Selecciona el tipo de análisis. En una intersección semaforizada captura ciclo y
+   periodo en **Proyecto**. Define ramales, carriles de entrada/salida y azimuts en **Geometría**.
+2. En **Movimientos** selecciona carriles y habilita rutas como `A → C`. Captura el aforo,
+   PHF y pesados de cada ruta y los parámetros del grupo.
+3. En **Semaforización** construye las fases, asigna grupos y captura los intervalos.
+   La suma de intervalos debe cerrar el ciclo. Registra los semáforos que correspondan.
+4. Presiona **Calcular situación actual** o `F5`. Consulta el diagnóstico y los resultados.
+   Los cambios de entrada marcan el cálculo anterior como desactualizado.
+5. Usa **Optimizar intersección**. Elige método, objetivo y restricciones. Abre **Comparar
+   escenarios** y selecciona una o varias alternativas con el mismo escenario original.
+6. Exporta la intersección en **Reporte técnico**. Rotondas y Transporte público disponen
+   de exportación propia. En **Archivo** puedes exportar los análisis vigentes en un informe general.
+7. Guarda como `.hcnet`. El archivo conserva entradas, fases, alternativas y estado de
+   cálculo de los tres módulos. También se pueden abrir proyectos anteriores `.hcnet.json`.
 
 La exportación LaTeX solicita el nombre del analista y el nombre y destino del archivo.
 El archivo generado
@@ -158,11 +174,11 @@ edición y erratas correspondientes.
 ## Ruta de desarrollo
 
 - Validación exhaustiva del módulo semaforizado contra casos autorizados del HCM 7/HCS.
-- Validación geométrica automática de conflictos y control actuado.
-- Intersecciones no semaforizadas y glorietas.
+- Validación geométrica detallada de conflictos y control actuado.
+- Cruces con prioridad y rotondas multicarril.
 - Segmentos básicos de autopista y carreteras multicarril.
 - Carreteras de dos carriles y análisis multimodal.
-- Corredores, comparación de escenarios y calibración con datos mexicanos.
+- Coordinación de corredores y calibración con datos mexicanos.
 - Redes multimodales, matrices OD, transbordos y evaluación económica de líneas.
 
 ## Autor y licencia

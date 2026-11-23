@@ -18,6 +18,7 @@ from hcnet.domain.models import (
     SignalOptimizationResult,
     SignalPhaseResult,
 )
+from hcnet.domain.signals import prepare_project
 from hcnet.domain.validation import validate_project
 
 
@@ -89,6 +90,8 @@ def level_of_service(control_delay_s_veh: float, degree_of_saturation: float | N
 def calculate_lane_group(
     project: IntersectionProject,
     group: LaneGroupInput,
+    *,
+    delay_model: str = "HCNet",
 ) -> LaneGroupResult:
     """Calcula capacidad, grado de saturación y demora de un grupo."""
 
@@ -119,8 +122,17 @@ def calculate_lane_group(
     )
     incremental_delay = 900.0 * period * ((degree - 1.0) + sqrt(radical))
     incremental_delay = max(0.0, incremental_delay)
+    if delay_model == "Akçelik":
+        x0 = 0.67 + saturation_flow * group.effective_green_s / (3600 * 600)
+        overflow = 0.0
+        if degree > x0:
+            overflow = capacity * period / 4 * (
+                degree - 1 + sqrt((degree - 1)**2 + 12 * (degree - x0) / (capacity * period))
+            )
+        incremental_delay = 3600 * overflow / capacity
+        uniform_delay /= group.progression_factor
 
-    initial_queue_delay = group.initial_queue_delay_s_veh
+    initial_queue_delay = group.initial_queue_delay_s_veh if delay_model == "HCNet" else 0
     control_delay = uniform_delay + incremental_delay + initial_queue_delay
 
     red_time = cycle - group.effective_green_s
@@ -170,15 +182,24 @@ def calculate_lane_group(
     )
 
 
-def calculate_intersection(project: IntersectionProject) -> IntersectionResult:
+def calculate_intersection(
+    project: IntersectionProject, *, delay_model: str = "HCNet",
+) -> IntersectionResult:
     """Valida y calcula todos los grupos y el agregado de la intersección."""
 
+    try:
+        project = prepare_project(project)
+    except ValueError as exc:
+        raise CalculationError([str(exc)]) from exc
     issues = validate_project(project)
     errors = [issue.display(project) for issue in issues if issue.severity == "error"]
     if errors:
         raise CalculationError(errors)
 
-    results = tuple(calculate_lane_group(project, group) for group in project.lane_groups)
+    results = tuple(
+        calculate_lane_group(project, group, delay_model=delay_model)
+        for group in project.lane_groups
+    )
     total_volume = sum(group.volume_veh_h for group in project.lane_groups)
     total_demand = sum(result.demand_flow_rate_veh_h for result in results)
     if total_demand > 0:

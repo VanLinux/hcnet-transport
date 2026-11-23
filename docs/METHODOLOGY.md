@@ -212,26 +212,81 @@ tviaje = t0 + d
 El resultado representa el recorrido por la aproximación más la demora de control. No
 incluye tiempo en segmentos posteriores ni una asignación dinámica de rutas.
 
-## 9. Optimización semafórica Webster
+## 9. Programación semafórica y alternativas
 
-Los grupos se asocian a fases. Para cada fase se adopta como relación crítica el máximo
-`v/s` de los grupos simultáneos; después se calcula:
+Los movimientos de un mismo grupo de carriles comparten capacidad y verde. Para los
+movimientos habilitados, la demanda equivalente del grupo es `Σ(Vi/PHFi)`. El PHF
+equivalente es `ΣVi / Σ(Vi/PHFi)` y el porcentaje de pesados se pondera por `Vi/PHFi`.
+La demanda de un movimiento se mide directamente. Su demora y LOS en la comparación
+corresponden al resultado del grupo que utiliza. Las colas y la capacidad pertenecen al grupo.
+
+Cada fase recibe un intervalo de verde, amarillo y todo rojo. La suma debe cerrar el
+ciclo. El modelo usa verde efectivo igual al verde capturado y valida conflictos de
+cruce y convergencia en un esquema de circulación por la derecha. Un movimiento
+permisivo requiere un factor de giro calibrado; la comprobación admite una sola
+corriente permisiva por par en conflicto. El controlador representado es secuencial.
+Los grupos de carriles comparten una única fase y las cabezas del mismo grupo de control
+se mantienen sincronizadas. No se modelan traslapes, intervalos protegidos/permisivos
+múltiples, tiempos mínimos peatonales ni coordinación entre intersecciones.
+
+### 9.1 Webster
+
+Para cada fase se adopta como relación crítica `yi` el mayor `v/s` de los grupos
+simultáneos. `l` es el tiempo perdido capturado por fase, `n` el número de fases y
+`D` la suma de los amarillos y todo rojo. El cálculo aplica:
 
 ```text
 Y = Σ yi
 L = n · l
 C0 = (1.5L + 5)/(1 - Y)
-gi = (yi/Y)(C0 - L)
+gi = (yi/Y)(C - D), antes de imponer verdes mínimos
 ```
 
-El ciclo se limita al intervalo de 40 a 180 s y el reparto respeta el verde mínimo
-capturado. El diagrama de bandas muestra, para cada semáforo, su intervalo verde,
-amarillo y rojo dentro de un ciclo.
+El ciclo `C` usa los límites seleccionados (40 a 180 s por defecto) y además debe
+alojar los despejes y verdes mínimos. El reparto fija las fases que quedarían por
+debajo del verde mínimo y vuelve a repartir el tiempo restante. `Y ≥ 1` se rechaza
+porque no produce un ciclo teórico finito. Si se fija el ciclo, se calcula el reparto
+con ese ciclo.
 
-Webster proporciona una propuesta inicial de tiempo fijo. HCNet no comprueba todavía
-matrices completas de conflictos, mínimos peatonales, traslapes, coordinación entre
-intersecciones ni requisitos normativos locales. `Y ≥ 1` se rechaza porque no produce
-un ciclo finito con este método.
+### 9.2 Akçelik con búsqueda directa
+
+Con `s` en veh/h, `g` en segundos, capacidad `c` en veh/h, `X = v/c` y `T` en horas,
+se usan el umbral `X0` y la cola de desbordamiento `N`:
+
+```text
+X0 = 0.67 + (s/3600)g/600
+N = 0                                                   para X ≤ X0
+N = (cT/4)[X - 1 + sqrt((X - 1)² + 12(X - X0)/(cT))]     para X > X0
+d = C(1 - g/C)²/[2(1 - min(1, X)g/C)] + 3600N/c         en s/veh
+```
+
+La búsqueda local explora cambios del ciclo y transferencias de verde entre fases.
+Parte de las mejores semillas factibles (reparto actual o Webster). Empieza con
+pasos de 5 s, divide el paso por dos cuando el objetivo no mejora y termina al bajar
+de 0.1 s o alcanzar el límite elegido. Esta formulación de búsqueda omite el factor
+de progresión y la cola inicial. La evaluación final vuelve a usar el motor HCNet.
+La formulación de desbordamiento está documentada en el capítulo 9 de
+[*Traffic Flow Theory*, FHWA](https://www.fhwa.dot.gov/publications/research/operations/tft/chap9.pdf).
+
+### 9.3 Genético y Pareto
+
+Un candidato contiene el ciclo, el reparto de verdes y una asignación de grupos a
+fases. Se combinan y perturban repartos y ciclos, con poda de candidatos incompatibles.
+Cuando el analista lo habilita se pueden mover o intercambiar grupos completos entre
+fases existentes. Se preservan los bloqueos de asignación, la secuencia, los despejes
+y las relaciones entre semáforos y grupos de carriles.
+
+El algoritmo genético selecciona por demora media, P95 máxima o `v/c` crítico. En
+Pareto se retienen candidatos no dominados en las tres métricas, con hasta doce
+alternativas elegidas por su separación en el frente encontrado. El frente es una
+aproximación entre candidatos examinados. La semilla predeterminada 42 facilita
+reproducir los resultados. Los valores iniciales (24 candidatos, 25 generaciones,
+8 generaciones sin cambio) limitan el coste de búsqueda interactiva y son ajustables.
+
+Toda alternativa se evalúa con las ecuaciones operacionales de los apartados anteriores
+para compararla con la situación original. El proyecto guarda la configuración de
+búsqueda, el plan resultante y una copia de sus entradas originales. Así se puede
+reconstruir la comparación aunque se edite la situación actual.
 
 ## 10. Transporte público
 

@@ -35,13 +35,12 @@ def test_main_window_calculates_demo_and_populates_views(app: QApplication) -> N
     assert window.trace_selector.count() == 8
     assert "LOS" in window.los_card.value.text()
     assert "Flujo de demanda" in window.trace_browser.toPlainText()
-    assert window.tabs.widget(0) is window.scope_tab
-    assert window.tabs.tabText(0) == "Inicio y alcance"
-    assert window.tabs.tabText(4) == "↔  Semaforización"
-    assert window.tabs.tabText(6) == "↔  Reporte técnico"
-    assert window.tabs.tabText(7) == "◇  Transporte público"
-    assert window.tabs.tabText(8) == "◇  Rotondas"
-    assert "3.2.0" in window.windowTitle()
+    assert window.tabs.widget(0) is window.project_tab
+    assert window.tabs.tabText(3) == "↔ Semaforización"
+    assert window.detail_tabs.tabText(2) == "Reporte técnico"
+    assert window.workspace_choice.itemText(1) == "◇ Rotonda de un carril"
+    assert window.workspace_choice.itemText(2) == "◇ Transporte público"
+    assert "3.3.0" in window.windowTitle()
     assert window.last_transit_result is not None
     assert window.transit_tab.congestion_table.rowCount() == 4
     assert window.roundabout_tab.operations.rowCount() == 4
@@ -51,10 +50,11 @@ def test_main_window_calculates_demo_and_populates_views(app: QApplication) -> N
     assert window.last_transit_result.service_frequency_bus_h == pytest.approx(10.0)
     assert "10.00 bus/h" in window.transit_tab.service_metric.value.text()
 
-    window.optimize_signal_plan()
+    original_cycle = window.cycle_spin.value()
+    assert window.optimize_signal_plan()
     assert window.last_optimization is not None
-    assert "Webster" in window.optimization_summary.text()
-    assert window.cycle_spin.value() == window.last_optimization.cycle_length_s
+    assert window.project.scenarios[-1].name == "Webster"
+    assert window.cycle_spin.value() == original_cycle
 
     window.dirty = False
     window.close()
@@ -110,7 +110,9 @@ def test_readable_fields_in_small_window(app: QApplication) -> None:
     window.show()
     app.processEvents()
     for field in (window.name_edit, window.location_edit, window.analyst_edit, window.date_edit):
+        assert field.isVisible()
         assert field.height() >= field.fontMetrics().height() + 8
+    assert window.project_tab.viewport().height() > 140
     assert window.project_tab.verticalScrollBar().maximum() > 0
     window.close()
 
@@ -120,7 +122,7 @@ def test_hcnet_restores_modules_and_optimized_plan(
 ) -> None:
     window = MainWindow()
     window.load_demo()
-    window.optimize_signal_plan()
+    assert window.optimize_signal_plan()
     plan = window.last_optimization
     window.transit_tab.headway.setValue(6)
     assert window.calculate_transit()
@@ -143,4 +145,30 @@ def test_hcnet_restores_modules_and_optimized_plan(
     assert window.roundabout_tab.operations.rowCount() == 4
     assert window.roundabout_tab.arms.item(0, 1).text() == "15.0"
     assert not window.dirty
+    window.close()
+
+
+def test_phase_edit_marks_baseline_stale_and_keeps_archived_comparison(app: QApplication) -> None:
+    window = MainWindow()
+    window.load_demo()
+    assert window.optimize_signal_plan()
+    assert window.phase_editor.cards.count() == 4
+    assert window.optimize_button.isEnabled()
+    assert window.scenario_panel.table.columnCount() == 4
+    initial = list(window.project.phases)
+    window.phase_editor._move(0, 1)
+    assert window.project.phases[:2] == initial[1::-1]
+    assert window.last_result is None
+    assert not window.optimize_button.isEnabled()
+    assert "histórico" in window.scenario_panel.list.item(0).text()
+    window.scenario_panel.list.item(0).setSelected(True)
+    assert window.scenario_panel.table.horizontalHeaderItem(1).text() == "Original archivado"
+    assert window.calculate(switch_tab=False)
+    window._advance_cycle()
+    assert window.live_sketch.active_phase == initial[1].number
+    window._set_theme(True)
+    window.workspace_choice.setCurrentIndex(2)
+    assert window.workspaces.currentWidget() is window.transit_tab
+    window._set_theme(False)
+    window.dirty = False
     window.close()

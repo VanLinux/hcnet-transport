@@ -9,7 +9,8 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from hcnet.domain.models import IntersectionProject, IntersectionResult
-from hcnet.domain.reporting import latex_report, roundabout_latex, transit_latex
+from hcnet.domain.reporting import general_latex, latex_report, roundabout_latex, transit_latex
+from hcnet.domain.signals import prepare_project
 
 
 def load_project(path: str | Path) -> IntersectionProject:
@@ -40,7 +41,7 @@ def export_results_csv(
 ) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    groups_by_id = {group.identifier: group for group in project.lane_groups}
+    groups_by_id = {group.identifier: group for group in prepare_project(project).lane_groups}
 
     columns = [
         "proyecto",
@@ -143,6 +144,10 @@ def export_transit_tex(project: IntersectionProject, path: str | Path) -> Path:
 
 def export_roundabout_tex(project: IntersectionProject, path: str | Path) -> Path:
     return _atomic_write_text(Path(path), roundabout_latex(project))
+
+
+def export_general_tex(project: IntersectionProject, path: str | Path) -> Path:
+    return _atomic_write_text(Path(path), general_latex(project))
 
 
 def _atomic_write_text(destination: Path, content: str) -> Path:

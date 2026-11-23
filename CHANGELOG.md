@@ -2,6 +2,16 @@
 
 Todos los cambios relevantes de HCNet Transport se documentan en este archivo.
 
+## 3.3.0
+
+- Navegación contextual con paneles ajustables, esquema interactivo y tema claro u oscuro.
+- Aforo, PHF y pesados por movimiento. Fases editables por tarjetas y bandas reproducibles.
+- Evaluación original explícita, con alternativas comparables e historial al editar entradas.
+- Webster, búsqueda directa con Akçelik, genético y búsqueda multiobjetivo con frente de Pareto.
+- Reasignación de grupos compatibles con bloqueos por grupo en Genético y Pareto.
+- Archivos `.hcnet` con fases y escenarios independientes. Lectura de esquemas anteriores.
+- Informes LaTeX carta con bandas a color, trayectorias y comparativas. Informe general por proyecto.
+
 ## 3.2.0
 
 - Ventana adaptable, formularios desplazables y altura mínima para los campos de captura.

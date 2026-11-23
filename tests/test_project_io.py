@@ -56,7 +56,7 @@ def test_latex_report_contains_analyst_results_and_escaped_text(tmp_path) -> Non
 
     report = path.read_text(encoding="utf-8")
     assert report.startswith(r"\documentclass")
-    assert "HCNet Transport 3.2.0" in report
+    assert "HCNet Transport 3.3.0" in report
     assert r"Cruce Norte \& Sur\_1" in report
     assert r"Dra. Ana López \& equipo" in report
     assert r"\section{Resultados por grupo de carriles}" in report
@@ -71,7 +71,7 @@ def test_saved_project_records_current_application_version(tmp_path) -> None:
 
     save_project(project, path)
 
-    assert '"application_version": "3.2.0"' in path.read_text(encoding="utf-8")
+    assert '"application_version": "3.3.0"' in path.read_text(encoding="utf-8")
 
 
 def test_independent_latex_reports_work_without_intersection(tmp_path) -> None:

@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import re
+
+from PySide6.QtGui import QColor, QPalette
+from PySide6.QtWidgets import QApplication, QWidget
+
 COLORS = {
     "navy": "#20242A",
     "blue": "#3F444B",
@@ -255,3 +260,60 @@ QToolTip {
     padding: 4px;
 }
 """
+
+DARK_COLORS = {
+    "#f5f5f5": "#161b22", "#ffffff": "#202731", "#202124": "#eef2f7",
+    "#30343b": "#dce4ed", "#5f6368": "#aab9cb", "#dadce0": "#435268",
+    "#ecedef": "#2d3746", "#c7c9cc": "#596a80", "#3f444b": "#496483",
+    "#e8eaed": "#354154", "#bfc2c5": "#65758a", "#4b5057": "#405b77",
+    "#7a7f85": "#8193a8", "#17191c": "#607fa0", "#b42318": "#faa19d",
+    "#f7f7f7": "#252e3a", "#f1f3f4": "#252e3a", "#9aa0a6": "#aab9cb",
+    "#657987": "#aab9cb", "#176b45": "#7ce3b4", "#eceef0": "#2d3746",
+}
+
+
+def dark_active() -> bool:
+    app = QApplication.instance()
+    return bool(app and app.property("hcnetDark"))
+
+
+def themed_text(source: str) -> str:
+    if dark_active():
+        return re.sub(r"#[0-9a-fA-F]{6}", lambda m: DARK_COLORS.get(
+            m[0].lower(), m[0]
+        ), source)
+    return source
+
+
+def chart_color(widget: QWidget, role: QPalette.ColorRole = QPalette.ColorRole.Text) -> QColor:
+    return widget.palette().color(role)
+
+
+def set_theme(dark: bool) -> None:
+    app = QApplication.instance()
+    if app is None:
+        return
+    app.setProperty("hcnetDark", dark)
+    palette = app.style().standardPalette()
+    if dark:
+        for role, color in {
+            QPalette.ColorRole.Window: "#161b22", QPalette.ColorRole.Base: "#202731",
+            QPalette.ColorRole.AlternateBase: "#252e3a", QPalette.ColorRole.Button: "#2d3746",
+            QPalette.ColorRole.Text: "#eef2f7", QPalette.ColorRole.WindowText: "#eef2f7",
+            QPalette.ColorRole.ButtonText: "#eef2f7", QPalette.ColorRole.Highlight: "#496483",
+            QPalette.ColorRole.HighlightedText: "#ffffff", QPalette.ColorRole.Mid: "#65758a",
+            QPalette.ColorRole.ToolTipBase: "#2d3746", QPalette.ColorRole.ToolTipText: "#eef2f7",
+        }.items():
+            palette.setColor(role, QColor(color))
+    app.setPalette(palette)
+    stylesheet = themed_text(APP_STYLESHEET)
+    if dark:
+        stylesheet += """
+        QMenuBar::item:selected, QMenu::item:selected { color: #eef2f7; }
+        QPushButton#primaryButton, QToolTip {
+            background: #405b77; border-color: #65758a; color: #ffffff;
+        }
+        QPushButton#primaryButton:hover { background: #496483; }
+        QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { selection-color: #ffffff; }
+        """
+    app.setStyleSheet(stylesheet)

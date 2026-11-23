@@ -6,7 +6,7 @@ from dataclasses import fields
 from math import cos, radians, sin
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from hcnet.domain.roundabout import ARM_LIMIT, RoundaboutArm, RoundaboutInput, RoundaboutResult
+from hcnet.ui.styles import chart_color
 
 ARM_FIELDS = (
     ("name", "Nombre"), ("azimuth_deg", "Azimut (°)"), ("entry_width_m", "Entrada (m)"),
@@ -62,7 +63,7 @@ class RoundaboutSketch(QWidget):
     def paintEvent(self, event) -> None:  # noqa: N802, ANN001
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#FFFFFF"))
+        painter.fillRect(self.rect(), chart_color(self, QPalette.ColorRole.Base))
         if self.data is None:
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Esquema de la rotonda")
             return
@@ -80,7 +81,7 @@ class RoundaboutSketch(QWidget):
             )))
             painter.drawLine(center, end)
             label_center = center + QPointF(dx * outer * 1.78, dy * outer * 1.78)
-            painter.setPen(QColor("#202124"))
+            painter.setPen(chart_color(self))
             painter.drawText(
                 QRectF(label_center.x()-18, label_center.y()-10, 36, 20),
                 Qt.AlignmentFlag.AlignCenter, chr(65 + index),

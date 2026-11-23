@@ -11,7 +11,7 @@ from hcnet import __version__
 from hcnet.domain.roundabout import RoundaboutInput
 from hcnet.domain.transit import TransitLineInput
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 AZIMUTHS = dict(zip(
     ("Norte", "Noreste", "Oriente", "Sureste", "Sur", "Suroeste", "Poniente", "Noroeste"),
     range(0, 360, 45), strict=True,
@@ -20,6 +20,33 @@ AZIMUTHS = dict(zip(
 
 def _identifier() -> str:
     return uuid4().hex[:12]
+
+
+@dataclass(frozen=True, slots=True)
+class MovementInput:
+    destination: str
+    volume: float = 0
+    phf: float = 1
+    heavy_percent: float = 0
+    enabled: bool = True
+    operation: str = "Protegido"
+
+
+@dataclass(frozen=True, slots=True)
+class PhaseInput:
+    number: int
+    green: float
+    yellow: float
+    all_red: float
+
+
+@dataclass(slots=True)
+class Scenario:
+    name: str
+    baseline_key: str
+    settings: dict[str, Any]
+    baseline: dict[str, Any]
+    plan: SignalOptimizationResult
 
 
 @dataclass(slots=True)
@@ -60,6 +87,7 @@ class LaneGroupInput:
     approach_length_m: float = 150.0
     average_vehicle_spacing_m: float = 7.5
     notes: str = ""
+    movements: tuple[MovementInput, ...] = ()
 
     def __post_init__(self) -> None:
         if self.lanes > 1 and self.lane_indices == (1,):
@@ -117,6 +145,7 @@ class SignalHeadInput:
     signal_type: str = "Vehicular circular"
     signal_phase: int = 1
     controlled_group_ids: tuple[str, ...] = ()
+    control_group: str = ""
 
 
 @dataclass(slots=True)
@@ -142,6 +171,10 @@ class IntersectionProject:
     roundabout: RoundaboutInput = field(default_factory=RoundaboutInput)
     calculated_modules: tuple[str, ...] = ()
     signal_optimization: SignalOptimizationResult | None = None
+    last_evaluated: dict[str, Any] | None = None
+    phases: list[PhaseInput] = field(default_factory=list)
+    scenarios: list[Scenario] = field(default_factory=list)
+    workspace: str = "signal"
     notes: str = ""
 
     @property
@@ -184,6 +217,26 @@ class IntersectionProject:
         raw_roundabout = data.pop("roundabout", None)
         raw_calculations = data.pop("calculated_modules", [])
         raw_optimization = data.pop("signal_optimization", None)
+        raw_phases = data.pop("phases", [])
+        raw_scenarios = data.pop("scenarios", [])
+        if not isinstance(raw_phases, list) or not isinstance(raw_scenarios, list):
+            raise ValueError("Las fases y escenarios deben ser listas.")
+        scenarios = []
+        for raw in raw_scenarios:
+            if not isinstance(raw, dict):
+                raise ValueError("Escenario inválido.")
+            plan = SignalOptimizationResult.from_dict(raw.get("plan"))
+            if (
+                plan is None
+                or not isinstance(raw.get("baseline"), dict)
+                or not isinstance(raw.get("settings"), dict)
+                or not isinstance(raw.get("baseline_key"), str)
+            ):
+                raise ValueError("Faltan datos del escenario.")
+            scenarios.append(Scenario(
+                str(raw.get("name", plan.method)), raw["baseline_key"], dict(raw["settings"]),
+                dict(raw["baseline"]), plan,
+            ))
         if not isinstance(raw_calculations, list):
             raise ValueError("Los módulos calculados deben ser una lista.")
         if not isinstance(raw_groups, list):
@@ -203,6 +256,7 @@ class IntersectionProject:
                 "analyst",
                 "study_date",
                 "optimization_method",
+                "workspace",
                 "notes",
             ),
             integers=("branch_count",),
@@ -270,6 +324,9 @@ class IntersectionProject:
                 )
             else:
                 clean_group["lane_indices"] = tuple(range(1, lanes + 1))
+            clean_group["movements"] = tuple(
+                MovementInput(**movement) for movement in clean_group.get("movements", ())
+            )
             groups.append(LaneGroupInput(**clean_group))
 
         heads = _parse_signal_heads(raw_heads)
@@ -286,6 +343,8 @@ class IntersectionProject:
             roundabout=RoundaboutInput.from_dict(raw_roundabout),
             calculated_modules=tuple(raw_calculations),
             signal_optimization=SignalOptimizationResult.from_dict(raw_optimization),
+            phases=[PhaseInput(**phase) for phase in raw_phases],
+            scenarios=scenarios,
             branch_count=branch_count,
             **{key: value for key, value in clean_project.items() if key != "branch_count"},
         )
@@ -324,7 +383,7 @@ def _parse_signal_heads(raw: list[dict[str, Any]]) -> list[SignalHeadInput]:
         clean = {key: value for key, value in item.items() if key in allowed}
         _convert_values(
             clean,
-            strings=("identifier", "name", "branch_code", "signal_type"),
+            strings=("identifier", "name", "branch_code", "signal_type", "control_group"),
             integers=("signal_phase",),
         )
         if "controlled_group_ids" in clean:

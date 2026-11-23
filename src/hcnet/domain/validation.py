@@ -124,7 +124,8 @@ def validate_project(project: IntersectionProject) -> list[ValidationIssue]:
         issues.append(
             ValidationIssue("error", "signal_lost_time_s", "El tiempo perdido debe ser positivo.")
         )
-    if project.yellow_time_s + project.all_red_time_s > project.signal_lost_time_s:
+    default_clearance = project.yellow_time_s + project.all_red_time_s
+    if not project.phases and default_clearance > project.signal_lost_time_s:
         issues.append(
             ValidationIssue(
                 "error",
