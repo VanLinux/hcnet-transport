@@ -10,9 +10,20 @@ from hcnet.domain.calculations import (
     calculate_intersection,
     calculate_lane_group,
     level_of_service,
+    optimize_signal_timing,
 )
 from hcnet.domain.models import IntersectionProject, LaneGroupInput
 from hcnet.domain.sample import demonstration_project
+
+
+@pytest.mark.parametrize("ramals", [2, 3])
+def test_intersection_calculates_with_reduced_geometry(ramals: int) -> None:
+    project = basic_project()
+    project.branch_count = ramals
+    project.branches[1].azimuth_deg = 170
+    project.lane_groups[0].destination_branches = ("B",)
+    result = calculate_intersection(project)
+    assert result.total_entering_volume_veh_h == 600
 
 
 def basic_project(**overrides) -> IntersectionProject:
@@ -132,7 +143,33 @@ def test_intersection_delay_is_weighted_by_adjusted_demand() -> None:
     ) / 900
 
     assert result.weighted_control_delay_s_veh == pytest.approx(expected)
-    assert result.critical_lane_group == "Norte · Directo"
+    assert result.critical_lane_group == "A → C · carril 1"
+
+
+def test_queue_and_travel_time_are_reported() -> None:
+    project = basic_project()
+    result = calculate_lane_group(project, project.lane_groups[0])
+
+    assert result.average_queue_veh > 0
+    assert result.queue_95_veh >= result.average_queue_veh
+    assert result.queue_95_m > 0
+    assert result.free_flow_travel_time_s == pytest.approx(13.5)
+    assert result.travel_time_s == pytest.approx(
+        result.free_flow_travel_time_s + result.control_delay_s_veh
+    )
+
+
+def test_webster_optimization_closes_cycle_and_respects_minimum_green() -> None:
+    project = demonstration_project()
+    optimized = optimize_signal_timing(project)
+
+    assert optimized.method == "Webster"
+    assert 40 <= optimized.cycle_length_s <= 180
+    assert optimized.total_critical_flow_ratio < 1
+    assert sum(
+        phase.green_s + project.signal_lost_time_s for phase in optimized.phases
+    ) == pytest.approx(optimized.cycle_length_s)
+    assert all(phase.green_s >= project.minimum_green_s for phase in optimized.phases)
 
 
 def test_invalid_green_is_rejected_before_calculation() -> None:

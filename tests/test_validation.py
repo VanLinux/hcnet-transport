@@ -32,3 +32,47 @@ def test_invalid_phf_and_width_are_errors() -> None:
 
     assert "peak_hour_factor" in errors
     assert "lane_width_m" in errors
+
+
+def test_three_leg_geometry_accepts_only_active_destinations() -> None:
+    valid = IntersectionProject(
+        branch_count=3,
+        lane_groups=[
+            LaneGroupInput(
+                origin_branch="A",
+                destination_branches=("B",),
+                lane_indices=(1,),
+            )
+        ],
+    )
+    invalid = IntersectionProject(
+        branch_count=3,
+        lane_groups=[
+            LaneGroupInput(
+                origin_branch="A",
+                destination_branches=("D",),
+                lane_indices=(1,),
+            )
+        ],
+    )
+
+    assert not [issue for issue in validate_project(valid) if issue.severity == "error"]
+    assert any(
+        issue.field == "destination_branches" and issue.severity == "error"
+        for issue in validate_project(invalid)
+    )
+
+
+def test_overlapping_lane_groups_generate_capacity_warning() -> None:
+    first = LaneGroupInput(identifier="first", lane_indices=(1,))
+    second = LaneGroupInput(
+        identifier="second",
+        destination_branches=("B",),
+        lane_indices=(1,),
+    )
+    project = IntersectionProject(lane_groups=[first, second])
+
+    assert any(
+        issue.field == "lane_groups" and "duplicar capacidad" in issue.message
+        for issue in validate_project(project)
+    )

@@ -1,7 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 3,
   "application": "HCNet Transport",
-  "application_version": "2.0.0",
+  "application_version": "3.1.0",
   "project": {
     "name": "Av. Universidad × Eje 10 Sur (caso demostrativo)",
     "location": "Ciudad de México",
@@ -9,14 +9,53 @@
     "study_date": "2026-09-11",
     "cycle_length_s": 100.0,
     "analysis_period_h": 0.25,
+    "branch_count": 4,
+    "branches": [
+      {
+        "code": "A",
+        "name": "Norte",
+        "position": "Norte",
+        "inbound_lanes": 3,
+        "outbound_lanes": 3
+      },
+      {
+        "code": "B",
+        "name": "Oriente",
+        "position": "Oriente",
+        "inbound_lanes": 3,
+        "outbound_lanes": 3
+      },
+      {
+        "code": "C",
+        "name": "Sur",
+        "position": "Sur",
+        "inbound_lanes": 3,
+        "outbound_lanes": 3
+      },
+      {
+        "code": "D",
+        "name": "Poniente",
+        "position": "Poniente",
+        "inbound_lanes": 3,
+        "outbound_lanes": 3
+      }
+    ],
     "lane_groups": [
       {
         "identifier": "demo-n-li",
+        "origin_branch": "A",
+        "destination_branches": [
+          "B"
+        ],
+        "lane_indices": [
+          1
+        ],
+        "signal_phase": 1,
         "approach": "Norte",
         "movement": "Izquierda",
-        "volume_veh_h": 145.0,
+        "volume_veh_h": 145,
         "lanes": 1,
-        "effective_green_s": 18.0,
+        "effective_green_s": 18,
         "peak_hour_factor": 0.92,
         "base_saturation_flow_pc_h_ln": 1900.0,
         "heavy_vehicles_percent": 4.0,
@@ -32,15 +71,28 @@
         "incremental_delay_factor": 0.5,
         "upstream_filtering_factor": 1.0,
         "initial_queue_delay_s_veh": 0.0,
+        "free_flow_speed_kmh": 40.0,
+        "approach_length_m": 150.0,
+        "average_vehicle_spacing_m": 7.5,
         "notes": ""
       },
       {
         "identifier": "demo-n-dr",
+        "origin_branch": "A",
+        "destination_branches": [
+          "C",
+          "D"
+        ],
+        "lane_indices": [
+          2,
+          3
+        ],
+        "signal_phase": 2,
         "approach": "Norte",
         "movement": "Directo + derecha",
-        "volume_veh_h": 640.0,
+        "volume_veh_h": 640,
         "lanes": 2,
-        "effective_green_s": 43.0,
+        "effective_green_s": 43,
         "peak_hour_factor": 0.92,
         "base_saturation_flow_pc_h_ln": 1900.0,
         "heavy_vehicles_percent": 4.0,
@@ -49,22 +101,70 @@
         "grade_percent": 0.0,
         "lane_utilization_factor": 0.95,
         "parking_maneuvers_h": 0.0,
-        "bus_blockages_h": 8.0,
+        "bus_blockages_h": 8,
         "area_type_factor": 1.0,
         "turn_factor": 0.98,
         "progression_factor": 1.0,
         "incremental_delay_factor": 0.5,
         "upstream_filtering_factor": 1.0,
         "initial_queue_delay_s_veh": 0.0,
+        "free_flow_speed_kmh": 40.0,
+        "approach_length_m": 150.0,
+        "average_vehicle_spacing_m": 7.5,
+        "notes": ""
+      },
+      {
+        "identifier": "demo-s-li",
+        "origin_branch": "C",
+        "destination_branches": [
+          "D"
+        ],
+        "lane_indices": [
+          1
+        ],
+        "signal_phase": 1,
+        "approach": "Sur",
+        "movement": "Izquierda",
+        "volume_veh_h": 125,
+        "lanes": 1,
+        "effective_green_s": 18,
+        "peak_hour_factor": 0.92,
+        "base_saturation_flow_pc_h_ln": 1900.0,
+        "heavy_vehicles_percent": 4.0,
+        "heavy_vehicle_equivalency": 2.0,
+        "lane_width_m": 3.5,
+        "grade_percent": 0.0,
+        "lane_utilization_factor": 1.0,
+        "parking_maneuvers_h": 0.0,
+        "bus_blockages_h": 0.0,
+        "area_type_factor": 1.0,
+        "turn_factor": 0.95,
+        "progression_factor": 1.0,
+        "incremental_delay_factor": 0.5,
+        "upstream_filtering_factor": 1.0,
+        "initial_queue_delay_s_veh": 0.0,
+        "free_flow_speed_kmh": 40.0,
+        "approach_length_m": 150.0,
+        "average_vehicle_spacing_m": 7.5,
         "notes": ""
       },
       {
         "identifier": "demo-s-dr",
+        "origin_branch": "C",
+        "destination_branches": [
+          "A",
+          "B"
+        ],
+        "lane_indices": [
+          2,
+          3
+        ],
+        "signal_phase": 2,
         "approach": "Sur",
         "movement": "Directo + derecha",
-        "volume_veh_h": 590.0,
+        "volume_veh_h": 590,
         "lanes": 2,
-        "effective_green_s": 43.0,
+        "effective_green_s": 43,
         "peak_hour_factor": 0.92,
         "base_saturation_flow_pc_h_ln": 1900.0,
         "heavy_vehicles_percent": 4.0,
@@ -80,15 +180,63 @@
         "incremental_delay_factor": 0.5,
         "upstream_filtering_factor": 1.0,
         "initial_queue_delay_s_veh": 0.0,
+        "free_flow_speed_kmh": 40.0,
+        "approach_length_m": 150.0,
+        "average_vehicle_spacing_m": 7.5,
+        "notes": ""
+      },
+      {
+        "identifier": "demo-e-li",
+        "origin_branch": "B",
+        "destination_branches": [
+          "C"
+        ],
+        "lane_indices": [
+          1
+        ],
+        "signal_phase": 3,
+        "approach": "Oriente",
+        "movement": "Izquierda",
+        "volume_veh_h": 110,
+        "lanes": 1,
+        "effective_green_s": 15,
+        "peak_hour_factor": 0.92,
+        "base_saturation_flow_pc_h_ln": 1900.0,
+        "heavy_vehicles_percent": 4.0,
+        "heavy_vehicle_equivalency": 2.0,
+        "lane_width_m": 3.5,
+        "grade_percent": 0.0,
+        "lane_utilization_factor": 1.0,
+        "parking_maneuvers_h": 0.0,
+        "bus_blockages_h": 0.0,
+        "area_type_factor": 1.0,
+        "turn_factor": 0.95,
+        "progression_factor": 1.0,
+        "incremental_delay_factor": 0.5,
+        "upstream_filtering_factor": 1.0,
+        "initial_queue_delay_s_veh": 0.0,
+        "free_flow_speed_kmh": 40.0,
+        "approach_length_m": 150.0,
+        "average_vehicle_spacing_m": 7.5,
         "notes": ""
       },
       {
         "identifier": "demo-e-dr",
+        "origin_branch": "B",
+        "destination_branches": [
+          "D",
+          "A"
+        ],
+        "lane_indices": [
+          2,
+          3
+        ],
+        "signal_phase": 4,
         "approach": "Oriente",
         "movement": "Directo + derecha",
-        "volume_veh_h": 485.0,
+        "volume_veh_h": 485,
         "lanes": 2,
-        "effective_green_s": 37.0,
+        "effective_green_s": 37,
         "peak_hour_factor": 0.92,
         "base_saturation_flow_pc_h_ln": 1900.0,
         "heavy_vehicles_percent": 4.0,
@@ -96,7 +244,7 @@
         "lane_width_m": 3.5,
         "grade_percent": 0.0,
         "lane_utilization_factor": 0.95,
-        "parking_maneuvers_h": 6.0,
+        "parking_maneuvers_h": 6,
         "bus_blockages_h": 0.0,
         "area_type_factor": 1.0,
         "turn_factor": 0.98,
@@ -104,9 +252,203 @@
         "incremental_delay_factor": 0.5,
         "upstream_filtering_factor": 1.0,
         "initial_queue_delay_s_veh": 0.0,
+        "free_flow_speed_kmh": 40.0,
+        "approach_length_m": 150.0,
+        "average_vehicle_spacing_m": 7.5,
+        "notes": ""
+      },
+      {
+        "identifier": "demo-w-li",
+        "origin_branch": "D",
+        "destination_branches": [
+          "A"
+        ],
+        "lane_indices": [
+          1
+        ],
+        "signal_phase": 3,
+        "approach": "Poniente",
+        "movement": "Izquierda",
+        "volume_veh_h": 105,
+        "lanes": 1,
+        "effective_green_s": 15,
+        "peak_hour_factor": 0.92,
+        "base_saturation_flow_pc_h_ln": 1900.0,
+        "heavy_vehicles_percent": 4.0,
+        "heavy_vehicle_equivalency": 2.0,
+        "lane_width_m": 3.5,
+        "grade_percent": 0.0,
+        "lane_utilization_factor": 1.0,
+        "parking_maneuvers_h": 0.0,
+        "bus_blockages_h": 0.0,
+        "area_type_factor": 1.0,
+        "turn_factor": 0.95,
+        "progression_factor": 1.0,
+        "incremental_delay_factor": 0.5,
+        "upstream_filtering_factor": 1.0,
+        "initial_queue_delay_s_veh": 0.0,
+        "free_flow_speed_kmh": 40.0,
+        "approach_length_m": 150.0,
+        "average_vehicle_spacing_m": 7.5,
+        "notes": ""
+      },
+      {
+        "identifier": "demo-w-dr",
+        "origin_branch": "D",
+        "destination_branches": [
+          "B",
+          "C"
+        ],
+        "lane_indices": [
+          2,
+          3
+        ],
+        "signal_phase": 4,
+        "approach": "Poniente",
+        "movement": "Directo + derecha",
+        "volume_veh_h": 460,
+        "lanes": 2,
+        "effective_green_s": 37,
+        "peak_hour_factor": 0.92,
+        "base_saturation_flow_pc_h_ln": 1900.0,
+        "heavy_vehicles_percent": 4.0,
+        "heavy_vehicle_equivalency": 2.0,
+        "lane_width_m": 3.5,
+        "grade_percent": 0.0,
+        "lane_utilization_factor": 0.95,
+        "parking_maneuvers_h": 0.0,
+        "bus_blockages_h": 0.0,
+        "area_type_factor": 1.0,
+        "turn_factor": 0.98,
+        "progression_factor": 1.0,
+        "incremental_delay_factor": 0.5,
+        "upstream_filtering_factor": 1.0,
+        "initial_queue_delay_s_veh": 0.0,
+        "free_flow_speed_kmh": 40.0,
+        "approach_length_m": 150.0,
+        "average_vehicle_spacing_m": 7.5,
         "notes": ""
       }
     ],
-    "notes": "Caso hipotético con fines docentes; no representa un aforo real."
+    "signal_heads": [
+      {
+        "identifier": "demo-s1",
+        "name": "S1 · A → B · carril 1",
+        "branch_code": "A",
+        "signal_type": "Flecha direccional",
+        "signal_phase": 1,
+        "controlled_group_ids": [
+          "demo-n-li"
+        ]
+      },
+      {
+        "identifier": "demo-s2",
+        "name": "S2 · A → C/D · carriles 2, 3",
+        "branch_code": "A",
+        "signal_type": "Vehicular circular",
+        "signal_phase": 2,
+        "controlled_group_ids": [
+          "demo-n-dr"
+        ]
+      },
+      {
+        "identifier": "demo-s3",
+        "name": "S3 · C → D · carril 1",
+        "branch_code": "C",
+        "signal_type": "Flecha direccional",
+        "signal_phase": 1,
+        "controlled_group_ids": [
+          "demo-s-li"
+        ]
+      },
+      {
+        "identifier": "demo-s4",
+        "name": "S4 · C → A/B · carriles 2, 3",
+        "branch_code": "C",
+        "signal_type": "Vehicular circular",
+        "signal_phase": 2,
+        "controlled_group_ids": [
+          "demo-s-dr"
+        ]
+      },
+      {
+        "identifier": "demo-s5",
+        "name": "S5 · B → C · carril 1",
+        "branch_code": "B",
+        "signal_type": "Flecha direccional",
+        "signal_phase": 3,
+        "controlled_group_ids": [
+          "demo-e-li"
+        ]
+      },
+      {
+        "identifier": "demo-s6",
+        "name": "S6 · B → D/A · carriles 2, 3",
+        "branch_code": "B",
+        "signal_type": "Vehicular circular",
+        "signal_phase": 4,
+        "controlled_group_ids": [
+          "demo-e-dr"
+        ]
+      },
+      {
+        "identifier": "demo-s7",
+        "name": "S7 · D → A · carril 1",
+        "branch_code": "D",
+        "signal_type": "Flecha direccional",
+        "signal_phase": 3,
+        "controlled_group_ids": [
+          "demo-w-li"
+        ]
+      },
+      {
+        "identifier": "demo-s8",
+        "name": "S8 · D → B/C · carriles 2, 3",
+        "branch_code": "D",
+        "signal_type": "Vehicular circular",
+        "signal_phase": 4,
+        "controlled_group_ids": [
+          "demo-w-dr"
+        ]
+      }
+    ],
+    "optimization_method": "Webster",
+    "signal_lost_time_s": 4.0,
+    "minimum_green_s": 10.0,
+    "yellow_time_s": 3.0,
+    "all_red_time_s": 1.0,
+    "public_transport": {
+      "name": "Corredor Universidad (caso demostrativo)",
+      "route_length_km": 12.0,
+      "stop_count_per_direction": 25,
+      "operating_speed_kmh": 28.0,
+      "terminal_layover_min": 8.0,
+      "scheduled_headway_min": 8.0,
+      "vehicle_capacity_pax": 80.0,
+      "target_load_factor": 0.85,
+      "peak_demand_pax_h_direction": 500.0,
+      "reserve_fleet_percent": 10.0,
+      "walking_speed_m_s": 1.2,
+      "average_trip_length_km": 5.0,
+      "boardings_per_stop": 8.0,
+      "alightings_per_stop": 7.0,
+      "boarding_time_s_pax": 2.5,
+      "alighting_time_s_pax": 1.8,
+      "door_open_close_s": 4.0,
+      "door_count": 2,
+      "exchange_mode": "Simultáneo",
+      "stop_accel_decel_penalty_s": 12.0,
+      "stop_clearance_s": 8.0,
+      "stop_berths": 1,
+      "background_flow_veh_h": 900.0,
+      "road_capacity_veh_h": 1800.0,
+      "bus_pce": 2.0,
+      "linear_alpha": 0.15,
+      "bpr_alpha": 0.15,
+      "bpr_beta": 4.0,
+      "davidson_j": 0.5,
+      "exponential_alpha": 0.15
+    },
+    "notes": "Caso hipotético con fines docentes. Los datos no representan un aforo real ni deben utilizarse para decisiones de proyecto."
   }
 }

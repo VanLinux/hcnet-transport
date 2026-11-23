@@ -7,7 +7,7 @@ se documentan en ``docs/METHODOLOGY.md``.
 
 from __future__ import annotations
 
-from math import isfinite, sqrt
+from math import ceil, isfinite, sqrt
 
 from hcnet.domain.models import (
     AdjustmentFactors,
@@ -15,6 +15,8 @@ from hcnet.domain.models import (
     IntersectionResult,
     LaneGroupInput,
     LaneGroupResult,
+    SignalOptimizationResult,
+    SignalPhaseResult,
 )
 from hcnet.domain.validation import validate_project
 
@@ -124,6 +126,11 @@ def calculate_lane_group(
     red_time = cycle - group.effective_green_s
     red_arrivals = demand * red_time / 3600.0
     residual_demand = max(0.0, (demand - capacity) * period)
+    average_queue = residual_demand + 0.5 * red_arrivals
+    queue_95 = residual_demand + red_arrivals + 1.645 * sqrt(max(0.0, red_arrivals))
+    queue_95_m = queue_95 / group.lanes * group.average_vehicle_spacing_m
+    free_flow_travel_time = group.approach_length_m / (group.free_flow_speed_kmh / 3.6)
+    travel_time = free_flow_travel_time + control_delay
 
     warnings: list[str] = []
     if degree > 1.0:
@@ -134,6 +141,10 @@ def calculate_lane_group(
         warnings.append("d₃ fue proporcionada por el usuario y no estimada por HCNet.")
     if group.progression_factor != 1.0:
         warnings.append("Se aplicó un factor de progresión definido por el usuario.")
+    if queue_95_m > group.approach_length_m:
+        warnings.append(
+            "La cola percentil 95 aproximada excede la longitud de aproximación disponible."
+        )
 
     return LaneGroupResult(
         identifier=group.identifier,
@@ -150,6 +161,11 @@ def calculate_lane_group(
         level_of_service=level_of_service(control_delay, degree),
         red_arrivals_veh_cycle=red_arrivals,
         residual_demand_veh=residual_demand,
+        average_queue_veh=average_queue,
+        queue_95_veh=queue_95,
+        queue_95_m=queue_95_m,
+        free_flow_travel_time_s=free_flow_travel_time,
+        travel_time_s=travel_time,
         warnings=tuple(warnings),
     )
 
@@ -170,8 +186,13 @@ def calculate_intersection(project: IntersectionProject) -> IntersectionResult:
             sum(result.control_delay_s_veh * result.demand_flow_rate_veh_h for result in results)
             / total_demand
         )
+        weighted_travel_time = (
+            sum(result.travel_time_s * result.demand_flow_rate_veh_h for result in results)
+            / total_demand
+        )
     else:
         weighted_delay = 0.0
+        weighted_travel_time = 0.0
 
     critical = max(results, key=lambda result: result.degree_of_saturation)
     warnings = [issue.display(project) for issue in issues if issue.severity == "warning"]
@@ -185,5 +206,138 @@ def calculate_intersection(project: IntersectionProject) -> IntersectionResult:
         level_of_service=level_of_service(weighted_delay),
         critical_degree_of_saturation=critical.degree_of_saturation,
         critical_lane_group=critical.label,
+        maximum_queue_95_m=max(result.queue_95_m for result in results),
+        weighted_travel_time_s=weighted_travel_time,
         warnings=tuple(dict.fromkeys(warnings)),
     )
+
+
+def optimize_signal_timing(project: IntersectionProject) -> SignalOptimizationResult:
+    """Optimiza ciclo y reparto de verdes con el método clásico de Webster.
+
+    Los grupos que comparten número de fase se consideran simultáneos; por ello se
+    utiliza la relación de flujo crítica máxima de cada fase. El resultado es una
+    propuesta inicial de tiempo fijo y debe revisarse frente a conflictos, peatones
+    y mínimos normativos antes de implantarse.
+    """
+
+    if not project.lane_groups:
+        raise CalculationError(["Agrega al menos un movimiento antes de optimizar."])
+    if project.optimization_method != "Webster":
+        raise CalculationError(
+            [f"El método de optimización '{project.optimization_method}' no está implementado."]
+        )
+    if project.signal_lost_time_s <= 0:
+        raise CalculationError(["El tiempo perdido por fase debe ser positivo."])
+    if project.yellow_time_s < 0 or project.all_red_time_s < 0:
+        raise CalculationError(["Los intervalos amarillo y todo rojo no pueden ser negativos."])
+    if project.yellow_time_s + project.all_red_time_s > project.signal_lost_time_s:
+        raise CalculationError(
+            ["Amarillo + todo rojo no puede exceder el tiempo perdido por fase."]
+        )
+
+    phase_ratios: dict[int, list[float]] = {}
+    for group in project.lane_groups:
+        if group.signal_phase < 1:
+            raise CalculationError([f"{group.label}: la fase debe ser mayor o igual que 1."])
+        demand = group.volume_veh_h / group.peak_hour_factor
+        saturation = (
+            group.base_saturation_flow_pc_h_ln
+            * group.lanes
+            * adjustment_factors(group).product
+        )
+        if saturation <= 0:
+            raise CalculationError([f"{group.label}: el flujo de saturación no es válido."])
+        phase_ratios.setdefault(group.signal_phase, []).append(demand / saturation)
+
+    critical = {phase: max(values) for phase, values in phase_ratios.items()}
+    total_ratio = sum(critical.values())
+    if total_ratio >= 1.0:
+        raise CalculationError(
+            [
+                "La suma de relaciones críticas Y es mayor o igual que 1.00; "
+                "Webster no produce un ciclo finito. Revisa demanda, fases o geometría."
+            ]
+        )
+
+    phase_numbers = sorted(critical)
+    phase_count = len(phase_numbers)
+    total_lost = phase_count * project.signal_lost_time_s
+    webster_cycle = (1.5 * total_lost + 5.0) / (1.0 - total_ratio)
+    minimum_cycle = phase_count * (project.minimum_green_s + project.signal_lost_time_s)
+    cycle = float(ceil(_clamp(max(webster_cycle, minimum_cycle), 40.0, 180.0)))
+    effective_green = cycle - total_lost
+    greens = _allocate_greens(
+        [critical[phase] for phase in phase_numbers],
+        effective_green,
+        project.minimum_green_s,
+    )
+
+    phases: list[SignalPhaseResult] = []
+    start = 0.0
+    for phase_number, ratio, green in zip(
+        phase_numbers, (critical[item] for item in phase_numbers), greens, strict=True
+    ):
+        end = start + green + project.signal_lost_time_s
+        phases.append(
+            SignalPhaseResult(
+                phase_number=phase_number,
+                critical_flow_ratio=ratio,
+                green_s=green,
+                yellow_s=project.yellow_time_s,
+                all_red_s=project.all_red_time_s,
+                start_s=start,
+                end_s=end,
+            )
+        )
+        start = end
+
+    warnings: list[str] = []
+    if webster_cycle > 180:
+        warnings.append("El ciclo teórico superó 180 s y fue limitado a ese valor.")
+    if total_ratio >= 0.90:
+        warnings.append("La suma crítica Y es alta; conviene revisar la factibilidad de las fases.")
+    warnings.append(
+        "La propuesta no sustituye la revisión de conflictos, tiempos peatonales "
+        "ni normativa local."
+    )
+    return SignalOptimizationResult(
+        method="Webster",
+        cycle_length_s=cycle,
+        total_critical_flow_ratio=total_ratio,
+        phases=tuple(phases),
+        warnings=tuple(warnings),
+    )
+
+
+def _allocate_greens(weights: list[float], total: float, minimum: float) -> list[float]:
+    """Distribuye verde proporcionalmente respetando un mínimo por fase."""
+
+    if not weights:
+        return []
+    if total < len(weights) * minimum:
+        return [total / len(weights)] * len(weights)
+
+    allocations = [0.0] * len(weights)
+    remaining = set(range(len(weights)))
+    remaining_total = total
+    while remaining:
+        weight_sum = sum(weights[index] for index in remaining)
+        shares = {
+            index: (
+                remaining_total * weights[index] / weight_sum
+                if weight_sum > 0
+                else remaining_total / len(remaining)
+            )
+            for index in remaining
+        }
+        below = {index for index, value in shares.items() if value < minimum}
+        if not below:
+            for index, value in shares.items():
+                allocations[index] = value
+            break
+        for index in below:
+            allocations[index] = minimum
+        remaining_total -= minimum * len(below)
+        remaining -= below
+    return allocations
