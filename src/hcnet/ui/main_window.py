@@ -114,6 +114,7 @@ class MainWindow(QMainWindow):
     PROJECT_FILTER = "Proyecto HCNet (*.hcnet)"
     OPEN_FILTER = PROJECT_FILTER + ";;Proyectos anteriores (*.hcnet.json *.json)"
     PANEL_WIDTHS = (520, 320, 160)
+    QT_MAX_WIDGET_HEIGHT = (1 << 24) - 1
 
     def __init__(self) -> None:
         super().__init__()
@@ -135,6 +136,7 @@ class MainWindow(QMainWindow):
         self._create_menu_and_toolbar()
         self._build_ui()
         self._load_project_into_ui(self.project)
+        self.workspace_choice.setCurrentIndex(self.workspace_choice.findData("help"))
         self._set_theme(QSettings("VanLinux", "HCNet Transport").value("dark", False, type=bool))
 
     @staticmethod
@@ -298,10 +300,12 @@ class MainWindow(QMainWindow):
         self.analysis_split.addWidget(self.tabs)
         self.analysis_split.addWidget(self.live_sketch)
         self.analysis_split.addWidget(self.side_panel)
-        self.signal_workspace = QSplitter(Qt.Orientation.Vertical)
-        self.signal_workspace.addWidget(self.analysis_split)
-        self.signal_workspace.addWidget(self.detail_tabs)
-        self.signal_workspace.setSizes([480, 230])
+        self.signal_workspace = QWidget()
+        signal_layout = QVBoxLayout(self.signal_workspace)
+        signal_layout.setContentsMargins(0, 0, 0, 0)
+        signal_layout.setSpacing(6)
+        signal_layout.addWidget(self.analysis_split, 1)
+        signal_layout.addWidget(self.detail_tabs, 1)
         self.workspaces = QStackedWidget()
         for widget in (
             self.signal_workspace, self.roundabout_tab, self.transit_tab, self.scope_tab,
@@ -326,13 +330,21 @@ class MainWindow(QMainWindow):
         self.page_title.setVisible(not compact)
         self.compact_view.setVisible(compact and self.workspace_choice.currentData() == "signal")
         self.tabs.setVisible(not compact or view == 0)
-        self.live_sketch.setVisible(not compact or view == 1)
-        self.side_panel.setVisible(not compact or view == 1)
+        show_sketch = view == 1 if compact else view != 2
+        self.live_sketch.setVisible(show_sketch)
+        self.side_panel.setVisible(show_sketch)
         self.analysis_split.setVisible(not compact or view != 2)
         self.detail_tabs.setVisible(not compact or view == 2)
+        self._set_tab_panel_expanded(self.tabs, compact or view != 2)
+        self.analysis_split.setMaximumHeight(self.tabs.maximumHeight())
+        self._set_tab_panel_expanded(self.detail_tabs, compact or view == 2)
         if changed and not compact:
             self.analysis_split.setSizes(list(self.PANEL_WIDTHS))
-            self.signal_workspace.setSizes([480, 230])
+
+    def _set_tab_panel_expanded(self, tabs: QTabWidget, expanded: bool) -> None:
+        height = self.QT_MAX_WIDGET_HEIGHT if expanded else tabs.tabBar().sizeHint().height()
+        tabs.setMaximumHeight(height)
+        tabs.currentWidget().setVisible(expanded)
 
     def _build_side_panel(self) -> QScrollArea:
         page = QWidget()
@@ -375,14 +387,20 @@ class MainWindow(QMainWindow):
             ),
             self.trace_tab: ("Reporte técnico", "Consulta las ecuaciones y exporta el informe."),
         }
-        for tabs in (self.tabs, self.detail_tabs):
-            tabs.currentChanged.connect(partial(self._show_panel_guide, tabs))
-            tabs.tabBarClicked.connect(partial(self._show_panel_guide, tabs))
+        for tabs, view in ((self.tabs, 0), (self.detail_tabs, 2)):
+            activate = partial(self._activate_tab_panel, tabs, view)
+            tabs.currentChanged.connect(activate)
+            tabs.tabBarClicked.connect(activate)
         self._show_panel_guide(self.tabs, self.tabs.currentIndex())
         self._set_summary_status("Calcula la situación actual.")
         scroll = self._scrollable(page)
         scroll.setMinimumWidth(140)
         return scroll
+
+    def _activate_tab_panel(self, tabs: QTabWidget, view: int, index: int) -> None:
+        if index >= 0:
+            self.compact_view.setCurrentIndex(view)
+            self._show_panel_guide(tabs, index)
 
     def _show_panel_guide(self, tabs: QTabWidget, index: int) -> None:
         guide = self._panel_guides.get(tabs.widget(index))
@@ -399,10 +417,12 @@ class MainWindow(QMainWindow):
         style.polish(self.summary_status)
 
     def _workspace_changed(self, index: int) -> None:
+        workspace = self.workspace_choice.itemData(index)
         self.workspaces.setCurrentIndex(index)
         self._update_display()
-        self.calculate_action.setEnabled(self.workspace_choice.currentData() != "help")
-        if self.workspace_choice.currentData() != "help":
+        self.calculate_action.setEnabled(workspace != "help")
+        if workspace != "help" and workspace != self.project.workspace:
+            self.project.workspace = workspace
             self._mark_document_dirty()
 
     def _set_theme(self, dark: bool) -> None:

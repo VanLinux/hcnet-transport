@@ -8,7 +8,7 @@ Manual* (HCM).
 
 [![Pruebas](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml/badge.svg)](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml)
 [![Licencia: GPL v3](https://img.shields.io/badge/Licencia-GPLv3-blue.svg)](LICENSE)
-[![Versión](https://img.shields.io/badge/versión-3.3.1-3f444b.svg)](CHANGELOG.md)
+[![Versión](https://img.shields.io/badge/versión-3.3.2-3f444b.svg)](CHANGELOG.md)
 
 ## Versión 3.3
 

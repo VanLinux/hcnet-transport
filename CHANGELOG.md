@@ -2,6 +2,11 @@
 
 Todos los cambios relevantes de HCNet Transport se documentan en este archivo.
 
+## 3.3.2
+
+- La intersección semaforizada amplía el panel de la pestaña elegida y deja las pestañas del otro panel a la vista.
+- HCNet abre en Inicio y alcance.
+
 ## 3.3.1
 
 - Rueda del ratón para desplazarse por los formularios. Edición de campos con flechas y teclado.

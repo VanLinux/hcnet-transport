@@ -27,6 +27,10 @@ def app() -> QApplication:
 
 def test_main_window_calculates_demo_and_populates_views(app: QApplication) -> None:
     window = MainWindow()
+    assert window.workspaces.currentWidget() is window.scope_tab
+    assert window.workspace_choice.currentData() == "help"
+    assert not window.calculate_action.isEnabled()
+    assert not window.dirty
     assert not window.project.lane_groups
     assert window.last_result is None
     assert window.transit_tab.line_name.text() == ""
@@ -112,6 +116,7 @@ def test_readable_fields_in_small_window(app: QApplication) -> None:
     window = MainWindow()
     window.setStyleSheet(APP_STYLESHEET)
     window.resize(640, 400)
+    window.workspace_choice.setCurrentIndex(window.workspace_choice.findData("signal"))
     window.tabs.setCurrentWidget(window.project_tab)
     window.show()
     app.processEvents()
@@ -120,6 +125,49 @@ def test_readable_fields_in_small_window(app: QApplication) -> None:
         assert field.height() >= field.fontMetrics().height() + 8
     assert window.project_tab.viewport().height() > 140
     assert window.project_tab.verticalScrollBar().maximum() > 0
+    window.close()
+
+
+def test_selected_tab_expands_its_panel_and_keeps_other_tabs_reachable(app: QApplication) -> None:
+    window = MainWindow()
+    window.resize(1240, 780)
+    window.workspace_choice.setCurrentIndex(window.workspace_choice.findData("signal"))
+    window.show()
+    app.processEvents()
+    upper_bar = window.tabs.tabBar()
+    lower_bar = window.detail_tabs.tabBar()
+
+    assert window.project_tab.isVisible()
+    assert window.live_sketch.isVisible()
+    assert not window.results_tab.isVisible()
+    assert window.detail_tabs.height() == lower_bar.height()
+    assert lower_bar.isVisible()
+
+    for _ in range(2):
+        QTest.mouseClick(lower_bar, Qt.MouseButton.LeftButton, pos=lower_bar.tabRect(0).center())
+        app.processEvents()
+        assert upper_bar.isVisible()
+        assert not window.project_tab.isVisible()
+        assert not window.live_sketch.isVisible()
+        assert not window.side_panel.isVisible()
+        assert window.analysis_split.height() == upper_bar.height()
+        assert window.results_tab.isVisible()
+        assert window.detail_tabs.geometry().bottom() == window.signal_workspace.rect().bottom()
+
+        QTest.mouseClick(upper_bar, Qt.MouseButton.LeftButton, pos=upper_bar.tabRect(0).center())
+        app.processEvents()
+        assert lower_bar.isVisible()
+        assert not window.results_tab.isVisible()
+        assert window.project_tab.isVisible()
+        assert window.analysis_split.height() > upper_bar.height()
+
+    window.resize(640, 400)
+    app.processEvents()
+    assert window.compact_view.isVisible()
+    window.compact_view.setCurrentIndex(1)
+    assert window.live_sketch.isVisible()
+    window.compact_view.setCurrentIndex(2)
+    assert window.results_tab.isVisible()
     window.close()
 
 
