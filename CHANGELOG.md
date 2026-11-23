@@ -2,6 +2,13 @@
 
 Todos los cambios relevantes de HCNet Transport se documentan en este archivo.
 
+## 3.3.1
+
+- Rueda del ratón para desplazarse por los formularios. Edición de campos con flechas y teclado.
+- Mayor contraste en modo claro y más espacio inicial para la captura en la vista de intersección.
+- Panel lateral con el estado del cálculo, indicadores y una guía de la pestaña seleccionada.
+- Diagramas de intersección y fases centrados en LaTeX. Preámbulo sin `inputenc` ni `fontenc`.
+
 ## 3.3.0
 
 - Navegación contextual con paneles ajustables, esquema interactivo y tema claro u oscuro.

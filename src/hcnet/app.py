@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication
 
 from hcnet import __version__
 from hcnet.ui.main_window import MainWindow
-from hcnet.ui.styles import APP_STYLESHEET
+from hcnet.ui.wheel import WheelScrollFilter
 
 
 def main() -> int:
@@ -19,7 +19,7 @@ def main() -> int:
     app.setApplicationVersion(__version__)
     app.setOrganizationName("VanLinux")
     app.setStyle("Fusion")
-    app.setStyleSheet(APP_STYLESHEET)
+    app.installEventFilter(WheelScrollFilter(app))
     QLocale.setDefault(QLocale(QLocale.Language.Spanish, QLocale.Country.Mexico))
 
     window = MainWindow()

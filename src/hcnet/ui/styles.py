@@ -217,7 +217,7 @@ QLabel#sectionTitle {
     font-size: 13pt;
     font-weight: 700;
 }
-QLabel#infoBanner {
+QLabel#infoBanner, QLabel#panelStatus {
     background: #ECEDEF;
     color: #30343B;
     border-left: 4px solid #5F6368;
@@ -230,6 +230,11 @@ QLabel#warningBanner {
     border-left: 4px solid #7A7F85;
     border-radius: 4px;
     padding: 10px;
+}
+QLabel#panelStatus[stale="true"] {
+    background: #FFF3D6;
+    color: #603B10;
+    border-left-color: #9A5B13;
 }
 QFrame#metricCard {
     background: #FFFFFF;
@@ -248,7 +253,7 @@ QLabel#metricValue {
 }
 QScrollArea {
     border: 0;
-    background: transparent;
+    background: #F5F5F5;
 }
 QSplitter::handle {
     background: #DADCE0;
@@ -269,6 +274,7 @@ DARK_COLORS = {
     "#7a7f85": "#8193a8", "#17191c": "#607fa0", "#b42318": "#faa19d",
     "#f7f7f7": "#252e3a", "#f1f3f4": "#252e3a", "#9aa0a6": "#aab9cb",
     "#657987": "#aab9cb", "#176b45": "#7ce3b4", "#eceef0": "#2d3746",
+    "#fff3d6": "#3b2b1b", "#603b10": "#ffdfa3", "#9a5b13": "#e1a04d",
 }
 
 
@@ -295,16 +301,19 @@ def set_theme(dark: bool) -> None:
         return
     app.setProperty("hcnetDark", dark)
     palette = app.style().standardPalette()
-    if dark:
-        for role, color in {
-            QPalette.ColorRole.Window: "#161b22", QPalette.ColorRole.Base: "#202731",
-            QPalette.ColorRole.AlternateBase: "#252e3a", QPalette.ColorRole.Button: "#2d3746",
-            QPalette.ColorRole.Text: "#eef2f7", QPalette.ColorRole.WindowText: "#eef2f7",
-            QPalette.ColorRole.ButtonText: "#eef2f7", QPalette.ColorRole.Highlight: "#496483",
-            QPalette.ColorRole.HighlightedText: "#ffffff", QPalette.ColorRole.Mid: "#65758a",
-            QPalette.ColorRole.ToolTipBase: "#2d3746", QPalette.ColorRole.ToolTipText: "#eef2f7",
-        }.items():
-            palette.setColor(role, QColor(color))
+    role = QPalette.ColorRole
+    for color_role, color in {
+        role.Window: "#f5f5f5", role.Base: "#ffffff", role.AlternateBase: "#f7f7f7",
+        role.Button: "#ecedef", role.Text: "#202124", role.WindowText: "#202124",
+        role.ButtonText: "#202124", role.Highlight: "#3f444b", role.Mid: "#bfc2c5",
+        role.PlaceholderText: "#5f6368", role.ToolTipBase: "#ecedef", role.ToolTipText: "#202124",
+    }.items():
+        palette.setColor(color_role, QColor(DARK_COLORS[color] if dark else color))
+    palette.setColor(role.HighlightedText, QColor("#ffffff"))
+    palette.setColor(role.Link, QColor("#a6cfff" if dark else "#174a78"))
+    for text_role in (role.Text, role.WindowText, role.ButtonText):
+        palette.setColor(QPalette.ColorGroup.Disabled, text_role,
+                         QColor("#aab9cb" if dark else "#656972"))
     app.setPalette(palette)
     stylesheet = themed_text(APP_STYLESHEET)
     if dark:

@@ -5,17 +5,23 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QPalette, QWheelEvent
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QWidget
 
+from hcnet import __version__
 from hcnet.domain.models import LaneGroupInput
 from hcnet.ui.dialogs import LaneGroupDialog
 from hcnet.ui.main_window import MainWindow
 from hcnet.ui.styles import APP_STYLESHEET
+from hcnet.ui.wheel import WheelScrollFilter
 
 
 @pytest.fixture(scope="module")
 def app() -> QApplication:
     instance = QApplication.instance() or QApplication([])
+    instance.installEventFilter(WheelScrollFilter(instance))
     return instance
 
 
@@ -40,7 +46,7 @@ def test_main_window_calculates_demo_and_populates_views(app: QApplication) -> N
     assert window.detail_tabs.tabText(2) == "Reporte técnico"
     assert window.workspace_choice.itemText(1) == "◇ Rotonda de un carril"
     assert window.workspace_choice.itemText(2) == "◇ Transporte público"
-    assert "3.3.0" in window.windowTitle()
+    assert __version__ in window.windowTitle()
     assert window.last_transit_result is not None
     assert window.transit_tab.congestion_table.rowCount() == 4
     assert window.roundabout_tab.operations.rowCount() == 4
@@ -170,5 +176,77 @@ def test_phase_edit_marks_baseline_stale_and_keeps_archived_comparison(app: QApp
     window.workspace_choice.setCurrentIndex(2)
     assert window.workspaces.currentWidget() is window.transit_tab
     window._set_theme(False)
+    window.dirty = False
+    window.close()
+
+
+def test_wheel_scrolls_form_and_leaves_focused_controls_unchanged(app: QApplication) -> None:
+    def scroll_over(widget: QWidget) -> None:
+        position = widget.rect().center()
+        event = QWheelEvent(
+            QPointF(position), QPointF(widget.mapToGlobal(position)), QPoint(), QPoint(0, -120),
+            Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.NoScrollPhase, False,
+        )
+        QApplication.sendEvent(widget, event)
+
+    window = MainWindow()
+    window.resize(640, 400)
+    window.show()
+    window.load_demo()
+    app.processEvents()
+
+    field = window.cycle_spin
+    field.setFocus()
+    original_cycle = field.value()
+    scrollbar = window.project_tab.verticalScrollBar()
+    scrollbar.setValue(0)
+    scroll_over(field.lineEdit())
+    assert scrollbar.value() > 0
+    assert field.value() == original_cycle
+    QTest.keyClick(field, Qt.Key.Key_Up)
+    assert field.value() == pytest.approx(original_cycle + field.singleStep())
+
+    picker = window.workspace_choice
+    picker.setFocus()
+    index = picker.currentIndex()
+    scroll_over(picker)
+    assert picker.currentIndex() == index
+    QTest.keyClick(picker, Qt.Key.Key_Down)
+    assert picker.currentIndex() == index + 1
+    scroll_over(window.roundabout_tab.circulation)
+    assert window.roundabout_tab.circulation.currentIndex() == 0
+
+    window.dirty = False
+    window.close()
+
+
+def test_side_panel_layout_theme_and_context(app: QApplication) -> None:
+    window = MainWindow()
+    window.resize(1240, 780)
+    window.show()
+    window.load_demo()
+    app.processEvents()
+
+    data, diagram, summary = window.analysis_split.sizes()
+    assert data > diagram > summary
+    assert "veh/h" in window.summary.text()
+    assert "Grupo crítico" in window.summary.text()
+    window.detail_tabs.setCurrentWidget(window.scenario_panel)
+    assert window.guide_title.text() == "Comparar escenarios"
+    window.tabs.tabBarClicked.emit(window.tabs.indexOf(window.project_tab))
+    assert window.guide_title.text() == "Proyecto"
+    window.cycle_spin.stepUp()
+    assert window.summary_status.property("stale") is True
+    assert "recalcular" in window.summary_status.text()
+    assert not window.summary.text()
+
+    result_page = window.results_tab.widget()
+    window._set_theme(True)
+    assert result_page.palette().color(QPalette.ColorRole.Window).lightness() < 80
+    window._set_theme(False)
+    assert result_page.palette().color(QPalette.ColorRole.Window).lightness() > 225
+    assert window.result_timestamp.palette().color(QPalette.ColorRole.WindowText).lightness() < 120
+
     window.dirty = False
     window.close()

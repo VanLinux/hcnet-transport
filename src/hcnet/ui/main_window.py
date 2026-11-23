@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
@@ -112,6 +113,7 @@ class MetricCard(QFrame):
 class MainWindow(QMainWindow):
     PROJECT_FILTER = "Proyecto HCNet (*.hcnet)"
     OPEN_FILTER = PROJECT_FILTER + ";;Proyectos anteriores (*.hcnet.json *.json)"
+    PANEL_WIDTHS = (520, 320, 160)
 
     def __init__(self) -> None:
         super().__init__()
@@ -291,15 +293,11 @@ class MainWindow(QMainWindow):
         self.live_sketch.setToolTip("Selecciona un acceso en el esquema para agregar un grupo.")
         self.live_sketch.branch_clicked.connect(self._add_at_branch)
         self.live_sketch.setAccessibleName("Geometría y movimientos")
-        self.summary = QLabel("Pendiente · Calcula la situación actual")
-        self.summary.setWordWrap(True)
-        self.summary.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.summary.setMinimumWidth(125)
+        self.side_panel = self._build_side_panel()
         self.analysis_split = QSplitter(Qt.Orientation.Horizontal)
         self.analysis_split.addWidget(self.tabs)
         self.analysis_split.addWidget(self.live_sketch)
-        self.analysis_split.addWidget(self.summary)
-        self.analysis_split.setSizes([480, 410, 220])
+        self.analysis_split.addWidget(self.side_panel)
         self.signal_workspace = QSplitter(Qt.Orientation.Vertical)
         self.signal_workspace.addWidget(self.analysis_split)
         self.signal_workspace.addWidget(self.detail_tabs)
@@ -329,12 +327,76 @@ class MainWindow(QMainWindow):
         self.compact_view.setVisible(compact and self.workspace_choice.currentData() == "signal")
         self.tabs.setVisible(not compact or view == 0)
         self.live_sketch.setVisible(not compact or view == 1)
-        self.summary.setVisible(not compact or view == 1)
+        self.side_panel.setVisible(not compact or view == 1)
         self.analysis_split.setVisible(not compact or view != 2)
         self.detail_tabs.setVisible(not compact or view == 2)
         if changed and not compact:
-            self.analysis_split.setSizes([480, 410, 220])
+            self.analysis_split.setSizes(list(self.PANEL_WIDTHS))
             self.signal_workspace.setSizes([480, 230])
+
+    def _build_side_panel(self) -> QScrollArea:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(12, 10, 10, 12)
+        layout.setSpacing(8)
+
+        title = QLabel("Situación actual")
+        title.setObjectName("sectionTitle")
+        title.setWordWrap(True)
+        self.summary_status = QLabel()
+        self.summary_status.setObjectName("panelStatus")
+        self.summary_status.setWordWrap(True)
+        self.summary = QLabel()
+        self.summary.setTextFormat(Qt.TextFormat.PlainText)
+        self.summary.setWordWrap(True)
+        self.guide_title = QLabel()
+        self.guide_title.setObjectName("sectionTitle")
+        self.guide_title.setWordWrap(True)
+        self.guide_detail = QLabel()
+        self.guide_detail.setWordWrap(True)
+        for widget in (
+            title, self.summary_status, self.summary, self.guide_title, self.guide_detail,
+        ):
+            layout.addWidget(widget)
+        layout.addStretch(1)
+
+        self._panel_guides = {
+            self.project_tab: ("Proyecto", "Identifica el estudio y define el ciclo de análisis."),
+            self.geometry_tab: ("Geometría", "Ajusta los ramales, su orientación y sus carriles."),
+            self.groups_tab: ("Movimientos", "Asigna carriles y captura el aforo de cada giro."),
+            self.signals_tab: (
+                "Semaforización", "Edita las fases, reproduce el ciclo o genera alternativas."
+            ),
+            self.results_tab: (
+                "Resultados actuales", "Consulta el desempeño. Abre un grupo para ver su cálculo."
+            ),
+            self.scenario_panel: (
+                "Comparar escenarios", "Coteja las demoras y las colas de las alternativas."
+            ),
+            self.trace_tab: ("Reporte técnico", "Consulta las ecuaciones y exporta el informe."),
+        }
+        for tabs in (self.tabs, self.detail_tabs):
+            tabs.currentChanged.connect(partial(self._show_panel_guide, tabs))
+            tabs.tabBarClicked.connect(partial(self._show_panel_guide, tabs))
+        self._show_panel_guide(self.tabs, self.tabs.currentIndex())
+        self._set_summary_status("Calcula la situación actual.")
+        scroll = self._scrollable(page)
+        scroll.setMinimumWidth(140)
+        return scroll
+
+    def _show_panel_guide(self, tabs: QTabWidget, index: int) -> None:
+        guide = self._panel_guides.get(tabs.widget(index))
+        if guide is not None:
+            title, detail = guide
+            self.guide_title.setText(title)
+            self.guide_detail.setText(detail)
+
+    def _set_summary_status(self, message: str, *, stale: bool = False) -> None:
+        self.summary_status.setText(message)
+        self.summary_status.setProperty("stale", stale)
+        style = self.summary_status.style()
+        style.unpolish(self.summary_status)
+        style.polish(self.summary_status)
 
     def _workspace_changed(self, index: int) -> None:
         self.workspaces.setCurrentIndex(index)
@@ -1423,11 +1485,15 @@ class MainWindow(QMainWindow):
         self._show_results(result, prepared)
         self.scenario_panel.refresh(self.project, result)
         self.optimize_button.setEnabled(self.displayed_timeline is not None)
+        self._set_summary_status("Escenario 0 · Cálculo vigente")
         self.summary.setText(
-            f"Escenario 0 · Condiciones actuales\n\nLOS {result.level_of_service}\n"
+            f"Nivel de servicio {result.level_of_service}\n"
             f"Demora {result.weighted_control_delay_s_veh:.1f} s/veh\n"
             f"v/c crítico {result.critical_degree_of_saturation:.3f}\n"
-            f"Cola P95 máxima {result.maximum_queue_95_m:.1f} m"
+            f"Cola P95 máxima {result.maximum_queue_95_m:.1f} m\n"
+            f"Volumen {result.total_entering_volume_veh_h:,.0f} veh/h\n"
+            f"Tiempo de viaje {result.weighted_travel_time_s:.1f} s\n\n"
+            f"Grupo crítico\n{result.critical_lane_group}"
         )
         self._record_calculation("intersection")
         if switch_tab:
@@ -1578,7 +1644,8 @@ class MainWindow(QMainWindow):
         )
         self.last_optimization = None
         self.optimize_button.setEnabled(False)
-        self.summary.setText("Pendiente · Calcula la situación actual")
+        self._set_summary_status("Calcula la situación actual.")
+        self.summary.clear()
         self.scenario_panel.refresh(self.project, None)
         if hasattr(self, "timing_diagram"):
             self.optimization_summary.setText("Sin optimización calculada.")
@@ -1788,7 +1855,8 @@ class MainWindow(QMainWindow):
         if self.last_result is not None:
             self.last_result = None
             self.result_timestamp.setText("Resultados anteriores · Presiona F5 para actualizar")
-            self.summary.setText("Datos modificados · Vuelve a calcular las condiciones actuales")
+            self._set_summary_status("Datos modificados. Presiona F5 para recalcular.", stale=True)
+            self.summary.clear()
             self.trace_selector.clear()
             self.trace_browser.setPlainText("Vuelve a calcular para actualizar la memoria.")
         self.optimize_button.setEnabled(False)

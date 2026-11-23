@@ -191,12 +191,11 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
         plan = f"Ciclo optimizado: {optimization.cycle_length_s:.1f} s. {phases}."
 
     return rf"""\documentclass[11pt,letterpaper]{{article}}
-\usepackage[utf8]{{inputenc}}
-\usepackage[T1]{{fontenc}}
 \usepackage{{amsmath}}
 \usepackage{{booktabs}}
 \usepackage{{longtable}}
 \usepackage[table]{{xcolor}}
+\usepackage{{pict2e}}
 \usepackage[letterpaper,margin=2.2cm]{{geometry}}
 \usepackage[hidelinks]{{hyperref}}
 \usepackage{{fancyhdr}}
@@ -256,13 +255,14 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
 
 \subsection{{Geometría por ramal}}
 {geometry_figure}
+\noindent\makebox[\linewidth][c]{{%
 \begin{{tabular}}{{llcrrr}}
 \toprule
 Letra & Ramal & Ubicación & Azimut ($^\circ$) & Entrada & Salida \\
 \midrule
 {branch_rows}
 \bottomrule
-\end{{tabular}}
+\end{{tabular}}}}\par
 
 {movement_data}
 
@@ -353,8 +353,6 @@ Software libre bajo GNU GPL v3.0}}
 
 def _module_latex(project: IntersectionProject, title: str, content: str) -> str:
     return rf"""\documentclass[11pt,letterpaper]{{article}}
-\usepackage[utf8]{{inputenc}}
-\usepackage[T1]{{fontenc}}
 \usepackage[margin=2cm]{{geometry}}
 \usepackage{{booktabs,longtable,amsmath}}
 \usepackage{{xcolor}}
@@ -390,41 +388,46 @@ def _movement_latex(project: IntersectionProject) -> str:
 
 
 def _geometry_latex(project: IntersectionProject, phase: int | None = None) -> str:
-    directions = {b.code: (sin(radians(b.azimuth)), cos(radians(b.azimuth)))
-                  for b in project.active_branches}
+    directions = {
+        b.code: (sin(radians(b.azimuth)), cos(radians(b.azimuth)))
+        for b in project.active_branches
+    }
 
-    def point(code: str, radius: float, shift: float = 0) -> tuple[float, float]:
+    def point(code: str, radius: float, shift: float = 0) -> str:
         x, y = directions[code]
-        return 78 + x * radius + y * shift, 68 + y * radius - x * shift
+        return f"({x * radius - y * shift:.2f},{y * radius + x * shift:.2f})"
 
-    def coordinates(p: tuple[float, float]) -> str:
-        return f"({p[0]:.2f},{p[1]:.2f})"
-
-    drawing = [r"\begin{center}\setlength{\unitlength}{1pt}\begin{picture}(156,137)"]
+    drawing = [
+        r"\par\noindent\makebox[\linewidth][c]{%",
+        r"\setlength{\unitlength}{1pt}\begin{picture}(158,158)(-79,-79)",
+        r"{\color{black!12}\put(0,0){\circle*{26}}",
+    ]
     for code in directions:
-        end = coordinates(point(code, 48))
-        label = coordinates(point(code, 60))
-        drawing.extend([
-            rf"\qbezier(78,68){coordinates(point(code,25))}{end}",
-            rf"\put{label}{{\makebox(0,0){{{_latex_escape(code)}}}}}",
-        ])
-    for group in project.lane_groups:
-        if phase is not None and phase != group.signal_phase:
+        drawing.append(
+            rf"\polygon*{point(code, 0, -10)}{point(code, 56, -10)}"
+            rf"{point(code, 56, 10)}{point(code, 0, 10)}"
+        )
+    drawing.append("}")
+    for code in directions:
+        drawing.append(rf"{{\color{{black!40}}\Line{point(code, 18)}{point(code, 56)}}}")
+        drawing.append(rf"\put{point(code, 69)}{{\makebox(0,0){{{_latex_escape(code)}}}}}")
+
+    routes = dict.fromkeys(
+        (group.origin_branch, dest)
+        for group in project.lane_groups if phase is None or phase == group.signal_phase
+        for dest in group.destination_branches
+    )
+    color = "blue!68!black" if phase is None else "green!48!black"
+    drawing.append(rf"{{\color{{{color}}}\linethickness{{1.05pt}}")
+    for origin, dest in routes:
+        if origin not in directions or dest not in directions:
             continue
-        for dest in group.destination_branches:
-            if group.origin_branch not in directions or dest not in directions:
-                continue
-            x, y = point(dest, 41, -5)
-            vx, vy = directions[dest]
-            origin = coordinates(point(group.origin_branch, 41, 5))
-            end = coordinates((x, y))
-            drawing.append(rf"{{\color{{blue!70!black}}\qbezier{origin}(78,68){end}")
-            for sign in (-1, 1):
-                wing = coordinates((x - vx*7 + sign*vy*4, y - vy*7 - sign*vx*4))
-                middle = coordinates((x - vx*3.5 + sign*vy*2, y - vy*3.5 - sign*vx*2))
-                drawing.append(rf"\qbezier{wing}{middle}{end}")
-            drawing.append("}")
-    drawing.append(r"\end{picture}\end{center}")
+        end = point(dest, 49, -5)
+        drawing.append(
+            rf"\cbezier{point(origin, 49, 5)}{point(origin, 8, 5)}{point(dest, 8, -5)}{end}"
+        )
+        drawing.append(rf"\polyline{point(dest, 43, -8)}{end}{point(dest, 43, -2)}")
+    drawing.extend(["}", r"\end{picture}}\par"])
     return "\n".join(drawing)
 
 
@@ -483,14 +486,15 @@ def _phase_figures(
     for phase in program.phases:
         figures.append("\n".join([
             r"\begin{minipage}{0.48\linewidth}\centering",
-            f"Fase {phase.phase_number} · Verde {phase.green_s:.2f} s",
+            rf"\small Fase {phase.phase_number} · Verde {phase.green_s:.2f} s\par",
             _geometry_latex(project, phase.phase_number),
             r"\end{minipage}",
         ]))
-    pairs = ["\n".join(figures[i:i + 2]) for i in range(0, len(figures), 2)]
-    return "\n".join([r"\subsubsection*{Trayectorias activas por fase}", *[
-        pair + r"\par" for pair in pairs
-    ]])
+    pairs = [r"\hfill".join(figures[i:i + 2]) for i in range(0, len(figures), 2)]
+    return "\n".join([
+        r"\subsubsection*{Trayectorias activas por fase}",
+        *[r"\noindent\makebox[\linewidth][c]{%" + "\n" + pair + r"}\par" for pair in pairs],
+    ])
 
 
 def _alternatives_latex(project: IntersectionProject, original: IntersectionResult) -> str:

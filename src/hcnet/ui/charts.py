@@ -82,32 +82,6 @@ class IntersectionSketch(QWidget):
                     center + direction * (size * 0.32) + offset,
                 )
 
-        totals: defaultdict[str, float] = defaultdict(float)
-        if self._project is not None:
-            for group in self._project.lane_groups:
-                totals[group.origin_branch] += group.volume_veh_h
-
-        painter.setFont(QFont(painter.font().family(), 9, QFont.Weight.DemiBold))
-        painter.setPen(chart_color(self))
-        for branch, direction in zip(branches, ends, strict=True):
-            label_x = min(width - 140, max(0, cx + direction.x() * size * 0.44 - 70))
-            label_y = min(height - 38, max(0, cy + direction.y() * size * 0.44 - 19))
-            rectangle = QRectF(label_x, label_y, 140, 38)
-            value = totals[branch.code]
-            text = (
-                f"{branch.label}\n{branch.inbound_lanes} carriles · "
-                f"{value:,.0f} veh/h"
-                if value
-                else f"{branch.label}\n{branch.inbound_lanes} carriles"
-            )
-            if self.compact:
-                painter.drawText(
-                    QRectF(cx + direction.x()*size*0.42 - 12, label_y, 24, 38),
-                    Qt.AlignmentFlag.AlignCenter, branch.code,
-                )
-            else:
-                painter.drawText(rectangle, Qt.AlignmentFlag.AlignCenter, text)
-
         if self._project is None:
             return
         directions = dict(zip((branch.code for branch in branches), ends, strict=True))
@@ -149,6 +123,37 @@ class IntersectionSketch(QWidget):
                                             else "#B3261E" if self.active_phase else "#8BA5C4"))
                     painter.setPen(Qt.PenStyle.NoPen)
                     painter.drawEllipse(dot, 4, 4)
+
+        totals: defaultdict[str, float] = defaultdict(float)
+        for group in self._project.lane_groups:
+            totals[group.origin_branch] += group.volume_veh_h
+
+        painter.setFont(QFont(painter.font().family(), 9, QFont.Weight.DemiBold))
+        metrics = painter.fontMetrics()
+        for branch, direction in zip(branches, ends, strict=True):
+            position = center + direction * (size * 0.44)
+            if self.compact:
+                lines = [branch.code]
+            else:
+                value = totals[branch.code]
+                volume = f" · {value:,.0f} veh/h" if value else ""
+                lanes = "carril" if branch.inbound_lanes == 1 else "carriles"
+                lines = [branch.label, f"{branch.inbound_lanes} {lanes}{volume}"]
+                if abs(direction.x()) > abs(direction.y()):
+                    position.setY(position.y() - road * 0.5 - metrics.height() - 2)
+
+            label_width = min(width - 4, max(metrics.horizontalAdvance(line) for line in lines) + 8)
+            label_height = metrics.lineSpacing() * len(lines) + 2
+            x = min(width - label_width, max(0, position.x() - label_width / 2))
+            y = min(height - label_height, max(0, position.y() - label_height / 2))
+            rectangle = QRectF(x, y, label_width, label_height)
+            painter.fillRect(rectangle, chart_color(self, QPalette.ColorRole.Base))
+            painter.setPen(chart_color(self))
+            text = "\n".join(
+                metrics.elidedText(line, Qt.TextElideMode.ElideRight, label_width - 4)
+                for line in lines
+            )
+            painter.drawText(rectangle, Qt.AlignmentFlag.AlignCenter, text)
 
 
 class SaturationChart(QWidget):
