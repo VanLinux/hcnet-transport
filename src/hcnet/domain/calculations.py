@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from math import ceil, isfinite, sqrt
 
+from hcnet.domain.calibration import empirical_multiplier
 from hcnet.domain.models import (
     AdjustmentFactors,
     IntersectionProject,
@@ -60,6 +61,9 @@ def adjustment_factors(group: LaneGroupInput) -> AdjustmentFactors:
         lane_utilization=group.lane_utilization_factor,
         area_type=group.area_type_factor,
         turn=group.turn_factor,
+        empirical=empirical_multiplier(
+            group.lane_indices, group.empirical_factors, group.field_calibration,
+        ),
     )
 
 

@@ -26,6 +26,7 @@ class IntersectionSketch(QWidget):
         self.compact = compact
         self.active_phase: int | None = None
         self.interactive = False
+        self.queue_bands: dict[tuple[str, int | None], float] = {}
         self.setMinimumSize(120 if compact else 220, 115 if compact else 215)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
@@ -81,6 +82,21 @@ class IntersectionSketch(QWidget):
                     center + direction * (road * 0.78) + offset,
                     center + direction * (size * 0.32) + offset,
                 )
+
+            for lane in (None, *range(1, branch.inbound_lanes + 1)):
+                fraction = self.queue_bands.get((branch.code, lane), 0)
+                if fraction <= 0:
+                    continue
+                # El carril 1 corresponde al borde derecho de la calzada de entrada.
+                lane_width = road / lanes
+                lateral = lane - 0.5 if lane else branch.inbound_lanes / 2
+                band_width = lane_width * (1 if lane else branch.inbound_lanes)
+                start = center + transverse * (road / 2 - lane_width * lateral)
+                start += direction * (road * 0.78)
+                end = start + direction * ((size * 0.32 - road * 0.78) * min(fraction, 1))
+                painter.setPen(QPen(QColor("#FFD84D"), band_width * 0.82,
+                                    Qt.PenStyle.SolidLine, Qt.PenCapStyle.FlatCap))
+                painter.drawLine(start, end)
 
         if self._project is None:
             return

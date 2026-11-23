@@ -2,6 +2,14 @@
 
 Todos los cambios relevantes de HCNet Transport se documentan en este archivo.
 
+## 3.4.0
+
+- Microsimulación opcional de intersecciones semaforizadas con SUMO en segundo plano.
+- Factores empíricos por carril y calibración con flujo de saturación observado.
+- Reproducción de colas de SUMO por ramal o carril, sincronizada con las señales reales.
+- Evaluación de emisiones de SUMO y estimación independiente de escape en ralentí.
+- Guardado de estudios por escenario, series comprimidas y ampliación de CSV y LaTeX.
+
 ## 3.3.2
 
 - La intersección semaforizada amplía el panel de la pestaña elegida y deja las pestañas del otro panel a la vista.

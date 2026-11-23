@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Literal
 
+from hcnet.domain.calibration import empirical_multiplier
 from hcnet.domain.models import IntersectionProject, LaneGroupInput
 
 Severity = Literal["error", "warning"]
@@ -243,6 +244,11 @@ def _validate_lane_group(
 
     def warning(field: str, message: str) -> None:
         issues.append(ValidationIssue("warning", field, message, index))
+
+    try:
+        empirical_multiplier(group.lane_indices, group.empirical_factors, group.field_calibration)
+    except (ValueError, TypeError, OverflowError) as exc:
+        error("empirical_factors", str(exc))
 
     numeric_values = (
         ("volume_veh_h", group.volume_veh_h),

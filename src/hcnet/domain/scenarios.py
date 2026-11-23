@@ -46,9 +46,11 @@ class SearchSettings:
 
 
 def baseline_snapshot(project: IntersectionProject) -> dict:
-    snapshot = replace(project, scenarios=[], last_evaluated=None).to_dict()["project"]
+    snapshot = replace(project, scenarios=[], last_evaluated=None, studies={}).to_dict()["project"]
     for key in (
         "scenarios",
+        "studies",
+        "study_settings",
         "public_transport",
         "roundabout",
         "calculated_modules",
@@ -63,6 +65,11 @@ def baseline_snapshot(project: IntersectionProject) -> dict:
         "optimization_method",
     ):
         del snapshot[key]
+    for group in snapshot["lane_groups"]:
+        if not group["empirical_factors"]:
+            del group["empirical_factors"]
+        if group["field_calibration"] is None:
+            del group["field_calibration"]
     return json.loads(json.dumps(snapshot, allow_nan=False))
 
 

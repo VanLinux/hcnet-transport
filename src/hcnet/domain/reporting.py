@@ -6,6 +6,7 @@ from html import escape
 from math import cos, radians, sin
 
 from hcnet import __version__
+from hcnet.domain.emissions import emission_difference
 from hcnet.domain.models import (
     IntersectionProject,
     IntersectionResult,
@@ -17,6 +18,8 @@ from hcnet.domain.roundabout import ArmResult, RoundaboutArm, calculate_roundabo
 from hcnet.domain.scenarios import baseline_key, evaluate_scenario, scenario_project
 from hcnet.domain.signals import prepare_project, signal_rows, timeline
 from hcnet.domain.transit import calculate_transit_line
+from hcnet.simulation.options import POLLUTANTS, scenario_choices
+from hcnet.simulation.results import unpack
 
 
 def calculation_trace_html(
@@ -74,6 +77,8 @@ def calculation_trace_html(
             <td>Uso de carriles</td></tr>
         <tr><td>f<sub>a</sub></td><td>{f.area_type:.4f}</td><td>Tipo de área</td></tr>
         <tr><td>f<sub>turn</sub></td><td>{f.turn:.4f}</td><td>Giro</td></tr>
+        <tr><td>k empírico</td><td>{f.empirical:.4f}</td>
+            <td>Calibración adicional sobre el flujo base ajustado</td></tr>
         <tr><th>Producto</th><th>{f.product:.4f}</th><th></th></tr>
       </table>
       <div class="equation">s = s₀ · N · Πf<br>
@@ -181,6 +186,7 @@ def latex_report(project: IntersectionProject, result: IntersectionResult) -> st
     original_timeline = _timeline_latex(project, program)
     phase_figures = _phase_figures(project, program)
     alternatives = _alternatives_latex(source_project, result)
+    studies = _studies_latex(source_project)
     movement_data = _movement_latex(project)
     optimization = project.signal_optimization
     plan = ""
@@ -328,6 +334,7 @@ El LOS usa la demora de control y la cola P95 es un diagnóstico aproximado.
 {detail_sections}
 
 {alternatives}
+{studies}
 
 \section{{Diagnóstico automático}}
 \begin{{itemize}}
@@ -764,6 +771,19 @@ def _lane_group_latex(
     result: LaneGroupResult,
 ) -> str:
     f = result.factors
+    calibration = []
+    for factor in source.empirical_factors:
+        target = f"carril {factor.lane}" if factor.lane else "todos los carriles del grupo"
+        text = (f"{factor.name} ({factor.symbol}), {factor.value:.3f}, {target}. "
+                f"{factor.description} Fuente: {factor.source}.")
+        calibration.append(_latex_escape(text) + r"\par")
+    field = source.field_calibration
+    if field:
+        calibration.append(
+            f"Calibración de campo: {field.observed:.2f} frente a {field.reference:.2f} veh/h. "
+            f"Coeficiente {field.coefficient:.4f}. Fuente: {_latex_escape(field.source)}."
+        )
+    calibration_text = "\n".join(calibration)
     return rf"""
 \subsection{{{_latex_escape(result.label)}}}
 Fase {source.signal_phase}, verde {source.effective_green_s:.2f} s.
@@ -775,7 +795,9 @@ $N={source.lanes}$; $s={result.saturation_flow_veh_h:.1f}$ veh/h.
 $f_w={f.lane_width:.3f}$, $f_{{HV}}={f.heavy_vehicles:.3f}$, $f_g={f.grade:.3f}$,
 $f_p={f.parking:.3f}$, $f_{{bb}}={f.bus_blockage:.3f}$,
 $f_{{LU}}={f.lane_utilization:.3f}$, $f_a={f.area_type:.3f}$,
-$f_{{turn}}={f.turn:.3f}$. El flujo ajustado usa $s=s_0N\prod f_i$.
+$f_{{turn}}={f.turn:.3f}$. El flujo ajustado usa $s=s_0N(\prod f_i)k_{{emp}}$, con
+$k_{{emp}}={f.empirical:.4f}$.
+{calibration_text}
 
 $d_1={result.uniform_delay_s_veh:.2f}$, $d_2={result.incremental_delay_s_veh:.2f}$ y
 $d_3={result.initial_queue_delay_s_veh:.2f}$ s/veh.
@@ -810,3 +832,177 @@ _LATEX_ESCAPES = {
 
 def _latex_escape(value: str) -> str:
     return "".join(_LATEX_ESCAPES.get(character, character) for character in value)
+
+
+def _study_table(headers: tuple[str, ...], rows: list[tuple], *, width: str = "5.8cm") -> str:
+    columns = f"p{{{width}}}" + "r" * (len(headers) - 1)
+    lines = [" & ".join(_latex_escape(str(v)) for v in row) + r" \\"
+             for row in [headers, *rows]]
+    return "\n".join([
+        r"\begin{small}", rf"\begin{{longtable}}{{{columns}}}", r"\toprule",
+        lines[0], r"\midrule", *lines[1:], r"\bottomrule", r"\end{longtable}", r"\end{small}",
+    ])
+
+
+def _study_plot(values: list[float], unit: str, start: int) -> str:
+    if len(values) < 2:
+        return ""
+    step = max(1, len(values) // 110)
+    offsets = [*range(0, len(values) - 1, step), len(values) - 1]
+    top, bottom = max(values) or 1, min(min(values), 0)
+    points = "".join(
+        f"({32 + 218 * i / (len(values) - 1):.2f},"
+        f"{18 + 55 * (values[i] - bottom) / (top - bottom):.2f})" for i in offsets
+    )
+    return "\n".join([
+        r"\par\noindent\makebox[\linewidth][c]{\begin{picture}(285,91)",
+        r"\Line(32,18)(252,18)\Line(32,18)(32,76)",
+        r"\linethickness{0.65pt}",
+        rf"{{\color{{blue!65!black}}\polyline{points}}}",
+        rf"\put(0,73){{\scriptsize {top:.3g}}}",
+        rf"\put(0,17){{\scriptsize {bottom:.3g}}}",
+        rf"\put(34,3){{\scriptsize {start}--{start+len(values)-1} s}}",
+        rf"\put(100,80){{\scriptsize {_latex_escape(unit)}}}",
+        r"\end{picture}}\par",
+    ])
+
+
+def _study_bars(values: list[tuple[str, float]], unit: str) -> str:
+    if not values:
+        return ""
+    scale = 100 / (max(abs(value) for _, value in values) or 1)
+    rows = [
+        rf"{_latex_escape(label)} & "
+        rf"\textcolor{{blue!65!black}}{{\rule{{{abs(value)*scale:.2f}pt}}{{5pt}}}} "
+        rf"& {value:.3g} {_latex_escape(unit)} \\"
+        for label, value in values
+    ]
+    return "\n".join([r"\begin{longtable}{p{5.4cm}lr}", *rows, r"\end{longtable}"])
+
+
+def _studies_latex(project: IntersectionProject) -> str:
+    if not project.studies:
+        return ""
+    sections = []
+    choices = scenario_choices(project)
+    original = project.studies.get(choices[0][1], {})
+    for label, key, config in choices:
+        record = project.studies.get(key)
+        if not record:
+            continue
+        sections.append(rf"\subsection{{{_latex_escape(label)}}}")
+        simulated = record.get("simulation")
+        idle = record.get("idle")
+        if simulated:
+            sections.extend(_simulation_latex(config, simulated))
+        if idle:
+            sections.extend([
+                r"\subsubsection{Emisiones en ralentí}",
+                f"Duración {idle['duration']} s. "
+                f"Espera media documentada {idle['waiting']:.2f} s/veh. "
+                f"Fuente: {_latex_escape(idle['source'])}. Escape durante el ralentí.",
+                _study_table(("Categoría", "Participación (%)"), [
+                    (k, f"{v:.2f}") for k, v in idle["composition"].items() if v
+                ]),
+                _study_table(("Contaminante", "Total"), [
+                    (name, f"{total:.4g} {POLLUTANTS[name]}")
+                    for name, total in idle["totals"].items()
+                ]),
+                _study_table(("Factor de ralentí (g/veh-h)", "Valor"), [
+                    (f"{vehicle} · {name}", f"{rate:.4g}")
+                    for vehicle, factors in idle["factors"].items()
+                    for name, rate in factors.items()
+                ]),
+                _study_bars([
+                    (vehicle, values["CO2"]) for vehicle, values in idle["by_type"].items()
+                    if "CO2" in values
+                ], "kg CO2"),
+            ])
+        if key == choices[0][1]:
+            continue
+        for engine, name in (("simulation", "SUMO"), ("idle", "ralentí")):
+            if engine not in record:
+                continue
+            rows = []
+            for pollutant, unit in POLLUTANTS.items():
+                delta = emission_difference(original.get(engine), record[engine], engine, pollutant)
+                if delta is None:
+                    continue
+                old, new, change, percent = delta
+                rows.append((f"{pollutant} ({unit})", f"{old:.4g}", f"{new:.4g}", f"{change:+.4g}",
+                             f"{percent:+.2f}" if percent is not None else "—"))
+            if rows:
+                sections.extend([
+                    rf"\subsubsection{{Comparación ambiental · {name}}}",
+                    _study_table(
+                        ("Indicador", "Actual", "Alternativa", "Cambio", "Cambio (%)"), rows,
+                    ),
+                ])
+                co2 = emission_difference(original.get(engine), record[engine], engine, "CO2")
+                if co2 is not None:
+                    sections.append(_study_bars([
+                        ("Actual", co2[0]), ("Alternativa", co2[1]),
+                    ], "kg CO2"))
+    if not sections:
+        return ""
+    return "\n".join([r"\section{Microsimulación y evaluación ambiental}", *sections])
+
+
+def _simulation_latex(project: IntersectionProject, sim: dict) -> list[str]:
+    from hcnet.domain.calculations import calculate_intersection
+
+    options, first = sim["options"], sim["runs"][0]
+    analytic = calculate_intersection(project)
+    comparisons = {
+        "Demora SUMO (timeLoss), s": analytic.weighted_control_delay_s_veh,
+        "Duración de viaje, s": analytic.weighted_travel_time_s,
+        "Cola P95 · extensión máxima instantánea, m": analytic.maximum_queue_95_m,
+    }
+    rows = []
+    for name, values in sim["metrics"].items():
+        ci = values["ci95"]
+        rows.append((name, f"{comparisons[name]:.3g}" if name in comparisons else "—",
+                     f"{values['mean']:.3g}", f"{values['sd']:.3g}" if values["sd"] is not None
+                     else "—", f"[{ci[0]:.3g}, {ci[1]:.3g}]" if ci else "—"))
+    run_rows = [(r["seed"], r["planned"], r["departed"], r["arrived"],
+                 f"{r['completed']}/{r['cohort']}") for r in sim["runs"]]
+    queue = unpack(first["queue_series"])
+    emission = unpack(first["emission_series"])
+    return [
+        r"\subsubsection{Resultados de microsimulación SUMO}",
+        f"{_latex_escape(sim['sumo'])}. Medición {options['duration']} s. "
+        f"Calentamiento {options['warmup']} s. Corridas {len(sim['runs'])}.",
+        f"Seguimiento {options['tau']} s, separación {options['min_gap']} m, "
+        f"aceleración {options['accel']}, desaceleración {options['decel']} m/s² y "
+        f"cambio de carril estratégico {options['strategic']}.",
+        "HCNet estima demora de control y cola P95. SUMO registra timeLoss y duración "
+        "de viajes completos en la red modelada, incluida la salida. La cola del cruce "
+        "es la máxima extensión entre sus carriles por segundo. Las definiciones difieren.",
+        _study_table(("Indicador", "HCNet", "SUMO", "DE", "IC 95 %"), rows),
+        _study_table(("Semilla", "Programados", "Insertados", "Arribos", "Medidos"), run_rows),
+        r"\subsubsection{Colas por ramal y carril · primera corrida}",
+        _study_table(("Elemento", "Media (m)", "Máx. (m)", "P95 (m)"), [
+            (label, f"{x['mean']:.2f}", f"{x['max']:.2f}", f"{x['p95']:.2f}")
+            for label, x in (*first["branches"].items(), *[
+                (f"{lane[0]} carril {lane[1]}", values)
+                for lane, values in zip(sim["lanes"], first["lanes"].values(), strict=True)
+            ])
+        ]),
+        _study_plot([max(row) for row in queue], "Cola máxima instantánea (m)", options["warmup"]),
+        r"\subsubsection{Emisiones directas y consumo en SUMO}",
+        _study_table(("Motorización · clase SUMO", "Porcentaje"), [
+            (f"{item['label']} · {item['emission_class']}", f"{item['percent']:.2f}")
+            for item in sim["fleet"] if item["percent"]
+        ]),
+        _study_table(("Indicador", "Total medio"), [
+            (key, f"{row['mean']:.5g} {POLLUTANTS[key]}") for key, row in sim["emissions"].items()
+        ]),
+        _study_bars([
+            (item["label"], sum(run["by_type"].get(f"v{i}", {}).get("CO2", 0)
+                                for run in sim["runs"]) / len(sim["runs"]))
+            for i, item in enumerate(sim["fleet"]) if item["percent"]
+        ], "kg CO2"),
+        _study_plot(
+            [row[0] for row in emission], "CO2 directo (kg/s) · corrida 1", options["warmup"],
+        ),
+    ]

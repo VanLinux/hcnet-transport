@@ -8,10 +8,11 @@ from typing import Any
 from uuid import uuid4
 
 from hcnet import __version__
+from hcnet.domain.calibration import EmpiricalFactor, FieldCalibration
 from hcnet.domain.roundabout import RoundaboutInput
 from hcnet.domain.transit import TransitLineInput
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 AZIMUTHS = dict(zip(
     ("Norte", "Noreste", "Oriente", "Sureste", "Sur", "Suroeste", "Poniente", "Noroeste"),
     range(0, 360, 45), strict=True,
@@ -88,6 +89,8 @@ class LaneGroupInput:
     average_vehicle_spacing_m: float = 7.5
     notes: str = ""
     movements: tuple[MovementInput, ...] = ()
+    empirical_factors: tuple[EmpiricalFactor, ...] = ()
+    field_calibration: FieldCalibration | None = None
 
     def __post_init__(self) -> None:
         if self.lanes > 1 and self.lane_indices == (1,):
@@ -174,6 +177,8 @@ class IntersectionProject:
     last_evaluated: dict[str, Any] | None = None
     phases: list[PhaseInput] = field(default_factory=list)
     scenarios: list[Scenario] = field(default_factory=list)
+    study_settings: dict[str, Any] = field(default_factory=dict)
+    studies: dict[str, Any] = field(default_factory=dict)
     workspace: str = "signal"
     notes: str = ""
 
@@ -269,6 +274,9 @@ class IntersectionProject:
                 "all_red_time_s",
             ),
         )
+        for key in ("study_settings", "studies"):
+            if key in clean_project and not isinstance(clean_project[key], dict):
+                raise ValueError(f"{key}: se esperaba un objeto.")
         branches = _parse_branches(raw_branches)
         allowed_group = set(LaneGroupInput.__dataclass_fields__)
         groups = []
@@ -327,6 +335,12 @@ class IntersectionProject:
             clean_group["movements"] = tuple(
                 MovementInput(**movement) for movement in clean_group.get("movements", ())
             )
+            clean_group["empirical_factors"] = tuple(
+                EmpiricalFactor(**item) for item in clean_group.get("empirical_factors", ())
+            )
+            field_calibration = clean_group.get("field_calibration")
+            if field_calibration is not None:
+                clean_group["field_calibration"] = FieldCalibration(**field_calibration)
             groups.append(LaneGroupInput(**clean_group))
 
         heads = _parse_signal_heads(raw_heads)
@@ -457,6 +471,7 @@ class AdjustmentFactors:
     lane_utilization: float
     area_type: float
     turn: float
+    empirical: float = 1.0
 
     @property
     def product(self) -> float:
@@ -469,6 +484,7 @@ class AdjustmentFactors:
             * self.lane_utilization
             * self.area_type
             * self.turn
+            * self.empirical
         )
 
 

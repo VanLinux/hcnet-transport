@@ -79,6 +79,7 @@ from hcnet.ui.charts import IntersectionSketch, SaturationChart, SignalTimingDia
 from hcnet.ui.dialogs import LaneGroupDialog, SignalHeadDialog
 from hcnet.ui.roundabout_tab import RoundaboutTab
 from hcnet.ui.signal_workspace import OptimizationDialog, PhaseEditor, ScenarioPanel
+from hcnet.ui.studies import IntersectionStudies
 from hcnet.ui.styles import COLORS, LOS_COLORS, dark_active, set_theme, themed_text
 from hcnet.ui.transit_widget import PublicTransportTab
 
@@ -126,6 +127,7 @@ class MainWindow(QMainWindow):
         self.dirty = False
         self._loading = False
         self._compact = None
+        self.study_dialog: IntersectionStudies | None = None
 
         self.setWindowTitle(f"HCNet Transport {__version__}")
         self.setMinimumSize(480, 330)
@@ -879,6 +881,27 @@ class MainWindow(QMainWindow):
         outer_layout.addWidget(scroll)
         return outer
 
+    def _open_studies(self) -> None:
+        if self.study_dialog is not None:
+            self.study_dialog.raise_()
+            self.study_dialog.activateWindow()
+            return
+        self.project = self._project_from_ui()
+        try:
+            dialog = IntersectionStudies(self.project, self)
+        except (ValueError, TypeError, KeyError) as exc:
+            QMessageBox.warning(self, "No se pudo abrir el estudio", str(exc))
+            return
+        self.study_dialog = dialog
+        dialog.changed.connect(self._mark_document_dirty)
+        dialog.finished.connect(self._close_studies)
+        dialog.show()
+
+    def _close_studies(self, *_args) -> None:
+        if self.study_dialog is not None:
+            self.study_dialog.deleteLater()
+            self.study_dialog = None
+
     def _build_results_tab(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
@@ -897,8 +920,11 @@ class MainWindow(QMainWindow):
         calculate_button = QPushButton("Calcular situación actual")
         calculate_button.setObjectName("primaryButton")
         calculate_button.clicked.connect(self.calculate)
+        study_button = QPushButton("Microsimulación, colas y emisiones…")
+        study_button.clicked.connect(self._open_studies)
         top.addWidget(calculate_button)
         layout.addLayout(top)
+        layout.addWidget(study_button, alignment=Qt.AlignmentFlag.AlignLeft)
 
         cards = QGridLayout()
         cards.setHorizontalSpacing(10)
@@ -1122,6 +1148,8 @@ class MainWindow(QMainWindow):
         )
 
     def _load_project_into_ui(self, project: IntersectionProject) -> None:
+        if self.study_dialog is not None:
+            self.study_dialog.reject()
         self._loading = True
         self.project = project
         self.name_edit.setText(project.name)
@@ -1870,6 +1898,8 @@ class MainWindow(QMainWindow):
         if self._loading:
             return
         self._invalidate("intersection")
+        if self.study_dialog is not None:
+            self.study_dialog.mark_capture_changed()
         if self.project.signal_optimization is not None:
             self.project.signal_optimization = None
         if self.last_result is not None:
@@ -1916,6 +1946,11 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{name}{marker} — HCNet Transport {__version__}")
 
     def _confirm_discard(self) -> bool:
+        if self.study_dialog is not None and self.study_dialog.worker is not None:
+            self.study_dialog.raise_()
+            self.study_dialog.activateWindow()
+            self.statusBar().showMessage("Espera o cancela la microsimulación en curso.", 5000)
+            return False
         if not self.dirty:
             return True
         answer = QMessageBox.question(

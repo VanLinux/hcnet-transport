@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
+    QPushButton,
     QScrollArea,
     QSpinBox,
     QTabWidget,
@@ -26,7 +27,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from hcnet.domain.calibration import empirical_multiplier
 from hcnet.domain.models import IntersectionProject, LaneGroupInput, MovementInput, SignalHeadInput
+from hcnet.ui.calibration import CalibrationDialog
 
 
 def _double_spin(
@@ -104,6 +107,9 @@ class LaneGroupDialog(QDialog):
         self.tabs.addTab(self._adjustments_tab(), "Avanzado")
         self.tabs.addTab(self._notes_tab(), "Notas")
         root.addWidget(self.tabs, 1)
+        calibration = QPushButton("Factores de ajuste y calibración…")
+        calibration.clicked.connect(self._open_calibration)
+        root.addWidget(calibration)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
@@ -397,8 +403,30 @@ class LaneGroupDialog(QDialog):
             movements=self._movement_values() if self._use_demand else self._source.movements,
         )
 
+    def _open_calibration(self) -> None:
+        group = self.lane_group()
+        try:
+            if not group.lane_indices:
+                raise ValueError("Selecciona al menos un carril de entrada.")
+            dialog = CalibrationDialog(group, self)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Revisa el grupo", str(exc))
+            return
+        if dialog.exec():
+            self._source = replace(
+                self._source, empirical_factors=dialog.group.empirical_factors,
+                field_calibration=dialog.group.field_calibration,
+            )
+
     def _accept_if_valid(self) -> None:
         problems = []
+        group = self.lane_group()
+        try:
+            empirical_multiplier(
+                group.lane_indices, group.empirical_factors, group.field_calibration,
+            )
+        except ValueError as exc:
+            problems.append(str(exc))
         if not _selected_list_data(self.destinations) and not self._source.movements:
             problems.append("Selecciona al menos un ramal de destino.")
         if not _selected_list_data(self.lane_indices):

@@ -8,7 +8,7 @@ Manual* (HCM).
 
 [![Pruebas](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml/badge.svg)](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml)
 [![Licencia: GPL v3](https://img.shields.io/badge/Licencia-GPLv3-blue.svg)](LICENSE)
-[![Versión](https://img.shields.io/badge/versión-3.3.2-3f444b.svg)](CHANGELOG.md)
+[![Versión](https://img.shields.io/badge/versión-3.4.0-3f444b.svg)](CHANGELOG.md)
 
 ## Versión 3.3
 
@@ -186,3 +186,50 @@ edición y erratas correspondientes.
 Desarrollador: **Héctor Alonso Benítez García**.
 
 HCNet Transport se distribuye bajo la [GNU General Public License v3.0](LICENSE).
+
+### Estudios opcionales con SUMO y calibración
+
+En **Intersección semaforizada**, captura y calcula el proyecto. En **Resultados actuales**
+abre **Microsimulación, colas y emisiones…** y elige las condiciones actuales o un
+escenario optimizado. Configura el periodo medido, el calentamiento, las repeticiones
+y la semilla. El caso demostrativo contiene geometría, aforos por movimiento y fases
+compatibles para probar el flujo completo. Guarda el proyecto en `.hcnet` para
+conservar las corridas, las series y los estudios de emisiones.
+
+- **Movimientos → editar grupo → Factores de ajuste y calibración…** permite revisar
+  los factores base, aplicar factores a carriles y contrastar el flujo de saturación
+  con un aforo de campo.
+- **Análisis de colas** muestra la P95 analítica como estimación estática. Al ejecutar
+  SUMO, selecciona la corrida y el instante para ver las longitudes medidas.
+- **Evaluación ambiental y emisiones** permite capturar la composición, clases SUMO
+  y factores de ralentí documentados. Para el cálculo de ralentí se requiere el
+  tiempo medio en ralentí y la fuente de los factores.
+
+Actualización y arranque en Fedora o Ubuntu, desde el clon existente en `main`:
+
+```bash
+git pull --ff-only origin main
+.venv/bin/python -m pip install -e .
+.venv/bin/hcnet
+```
+
+Si es el primer uso, crea el entorno con `python3 -m venv .venv` antes de ejecutar
+la instalación editable. En Ubuntu puede ser necesario `sudo apt install python3-venv`.
+
+El motor analítico funciona por separado. Para habilitar la microsimulación, HCNet
+busca `sumo` y `netconvert` del mismo paquete mediante `SUMO_HOME`, el entorno
+Python o `PATH`. También puedes seleccionar el ejecutable `sumo` desde la
+interfaz. Se requiere SUMO 1.14 o posterior para utilizar las unidades actuales
+de combustible.
+
+- **Ubuntu:** `sudo apt update && sudo apt install sumo`. Comprueba la versión con
+  `sumo --version` y que `netconvert --version` responda.
+- **Fedora:** si tu repositorio no ofrece el paquete, instala el paquete oficial
+  opcional en el entorno de HCNet con `.venv/bin/python -m pip install eclipse-sumo`.
+  Comprueba `.venv/bin/sumo --version` y `.venv/bin/netconvert --version`.
+  También está disponible esta vía en Ubuntu. Si tu plataforma carece de rueda
+  compatible, usa los binarios de Linux del proyecto SUMO y selecciona `bin/sumo`
+  en la interfaz.
+
+[Instalación oficial de SUMO](https://sumo.dlr.de/docs/Installing/index.html) ·
+[Metodología y alcance de los estudios](docs/METHODOLOGY.md#estudios-opcionales-de-intersecciones)

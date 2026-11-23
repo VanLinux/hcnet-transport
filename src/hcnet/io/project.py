@@ -78,6 +78,7 @@ def export_results_csv(
         "fa",
         "fturn",
         "producto_factores",
+        "multiplicador_empirico",
     ]
 
     with destination.open("w", encoding="utf-8-sig", newline="") as handle:
@@ -121,6 +122,7 @@ def export_results_csv(
                     "fa": _number(row.factors.area_type, 4),
                     "fturn": _number(row.factors.turn, 4),
                     "producto_factores": _number(row.factors.product, 4),
+                    "multiplicador_empirico": _number(row.factors.empirical, 4),
                 }
             )
 

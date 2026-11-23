@@ -499,3 +499,115 @@ El resultado geométrico sirve para predimensionamiento. El trazado definitivo
 requiere comprobar trayectorias rápidas y barrido del vehículo de diseño,
 visibilidad, deflexión, cruces peatonales y condiciones locales. Véase
 [NCHRP Report 1043, Guide for Roundabouts](https://www.nationalacademies.org/publications/27069).
+
+## Estudios opcionales de intersecciones
+
+### Factores por carril y calibración de campo
+
+Se conserva la formulación base de HCNet. Si un grupo tiene `N` carriles, con
+flujo de saturación base ajustado por carril `s_base`, la nueva expresión es
+
+```text
+s_grupo = s_base · k_cal · Σ_c producto(f_emp_c)
+```
+
+El producto para un carril sin ajustes es 1. El multiplicador empírico en el
+informe es el promedio de los productos por carril multiplicado por `k_cal`.
+La base por carril es uniforme dentro del grupo. El ajuste de campo es optativo
+y guarda la observación, el cálculo de referencia y la fuente. Su coeficiente es
+`s_observado / s_referencia`. La referencia incluye los factores analíticos de referencia
+implementados en HCNet y los ajustes residuales capturados al calibrar. Revisa la
+calibración si cambias posteriormente las condiciones de referencia.
+
+Cada factor personalizado exige identificación, descripción, fuente y un efecto
+residual. El editor distingue los símbolos base y valida que un mismo símbolo o
+tipo de efecto no se repita en un carril. Si un efecto ya está representado por
+ancho, pesados, pendiente, estacionamiento u otro parámetro existente, se registra
+en el ajuste base correspondiente. Los reductores aceptan 0.10–0.90 y el valor
+neutral 1.00. Un coeficiente de campo puede superar 1 si los flujos de referencia
+y observados lo justifican.
+
+### Generación, demanda y tiempos de SUMO
+
+Se crea una intersección aislada de cuatro o menos ramales con control estático.
+El carril 1 de HCNet se traduce al índice derecho 0 de SUMO. Se verifica el conjunto
+de conexiones de `netconvert` antes de instalar las fases de HCNet. Los movimientos
+protegidos y permisivos usan las prioridades correspondientes del semáforo.
+El alcance cubre la entrada, el cruce y un tramo de salida. Si un ramal tiene
+aforos de entrada, su salida adopta su misma longitud y velocidad de referencia.
+Una entrada sin grupos asignados usa 150 m y 40 km/h como referencia geométrica.
+Se capturan aforos independientes por destino cuando un grupo tiene varios giros.
+Los accesos con geometría contradictoria, movimientos duplicados o programas
+incompletos se rechazan mediante un mensaje.
+
+La tasa de llegadas por movimiento es `V/FHMD`. El número total programado se
+redondea al vehículo más cercano y se distribuye entre movimientos por mayores
+restos. Las salidas se escalonan a lo largo del horizonte con variación reproducible
+en cada intervalo. Se reparten por turno entre los carriles autorizados al insertar.
+El porcentaje de pesados se redondea por movimiento y corrida. Las categorías de
+motorización se seleccionan por semilla dentro de ligeros y pesados. El modelo
+microscópico de seguimiento trabaja de forma independiente de los factores
+analíticos. Los valores iniciales corresponden a un seguimiento de 1 s, una brecha
+de 2.5 m, aceleración de 2.6 m/s², deceleración de 4.5 m/s² e intensidad estratégica
+de cambio de carril de 1, editables en el cuadro avanzado.
+
+Los valores iniciales del experimento son 900 s medidos, 180 s de calentamiento y
+tres corridas. Un paso de integración dura 1 s. El intervalo de medición incluye
+el primer segundo que sigue al calentamiento y excluye el instante final.
+Las semillas consecutivas se registran en los resultados. La semilla automática
+elige la inicial al ejecutar. Para los indicadores por viaje se cuentan viajes
+completos que salen y llegan en la ventana medida. Se presentan tanto los completos
+como el tamaño de la cohorte, que incluye los viajes sin acabar al cese de la medición.
+Los vehículos que todavía no se insertan o llegan pueden ser relevantes en saturación.
+La media y la DE se calculan entre corridas. El intervalo bilateral del 95 % usa
+la distribución t de Student cuando existen por lo menos dos corridas.
+
+La demora analítica es de control. `timeLoss` de SUMO se refiere al tiempo perdido
+respecto a la velocidad deseada. La duración SUMO incluye el tramo de salida.
+Los valores se muestran juntos como diagnóstico con sus respectivas definiciones.
+SUMO no asigna niveles de servicio HCM. La red generada representa una intersección
+aislada. Los efectos de intersecciones vecinas y las colas fuera del tramo simulado
+exigen una red más extensa.
+
+### Colas y estados semafóricos
+
+La cola dinámica en metros utiliza `queueing_length` del motor. Se registra una
+observación por segundo y por carril. La cola por ramal en un instante es la mayor
+extensión entre sus carriles. La del cruce es la máxima extensión entre ramales.
+El P95 de cada serie usa el rango superior de las observaciones ordenadas. Por
+separado se cuentan vehículos detenidos con velocidad inferior a 0.1 m/s en los
+accesos. Una cola próxima al extremo del tramo advierte sobre el almacenamiento
+modelado. El esquema conserva la escala relativa a la longitud de cada acceso.
+La fase mostrada se obtiene de la salida de estados de SUMO. Sin microsimulación,
+la figura representa la P95 analítica estática.
+
+### Emisiones y comparación
+
+En ralentí, para cada tipo vehicular se multiplica el número de vehículos de la
+ventana de estudio por la espera media observada en ralentí en horas y el factor
+en g/(vehículo·h). El periodo usa el flujo de demanda ajustado. El analista registra
+la fuente. Los factores faltantes dejan fuera los contaminantes incompletos.
+Los vehículos eléctricos tienen cero emisiones de escape en este cálculo. El
+resultado se limita al ralentí y no incluye emisiones de circulación, desgaste o
+generación de electricidad.
+
+SUMO integra por segundo las tasas vehiculares de emisiones y consumo en la red
+representada. Los valores iniciales son ejemplos de clases HBEFA3 para gasolina,
+diésel y autobús. Se puede editar la clase por motorización y SUMO verifica si
+su instalación la admite. Los resultados expresan CO₂ en kg, CO, NOₓ y PMx en g,
+combustible en g y energía eléctrica en Wh. La energía no se transforma en
+emisiones indirectas. La comparación ambiental requiere el mismo motor,
+composición, demanda, periodo y, para SUMO, geometría y parámetros de simulación.
+El modelo de ralentí admite cambiar la espera por escenario.
+
+La clave del escenario identifica su captura y operación. Las series de cada
+corrida se comprimen dentro de `.hcnet` y los resultados quedan accesibles al reabrir.
+Cuando cambia la captura, las corridas anteriores siguen disponibles como históricas.
+Los resultados de un experimento cancelado se descartan sin afectar los estudios guardados.
+
+Referencias de SUMO sobre
+[colas](https://sumo.dlr.de/docs/Simulation/Output/QueueOutput.html),
+[estados semafóricos](https://sumo.dlr.de/docs/Simulation/Output/Traffic_Lights.html),
+[viajes](https://sumo.dlr.de/docs/Simulation/Output/TripInfo.html),
+[emisiones](https://sumo.dlr.de/docs/Simulation/Output/EmissionOutput.html) y
+[clases HBEFA3](https://sumo.dlr.de/docs/Models/Emissions/HBEFA3-based.html).
