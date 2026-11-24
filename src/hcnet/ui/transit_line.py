@@ -22,6 +22,7 @@ from hcnet.ui.transit_forms import (
     scroll,
     table,
 )
+from hcnet.ui.transit_layout import AdaptiveColumns
 from hcnet.ui.transit_vehicle import VehicleDoors
 
 VEHICLE_FIELDS = [
@@ -315,9 +316,33 @@ class LineEditor(QWidget):
         self.settings = QSettings()
         self.custom = self._load_library()
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         self.sections = QTabWidget()
+        self.sections.setDocumentMode(True)
         layout.addWidget(self.sections)
-        self.line = Form(LINE_FIELDS, self._edit)
+        self.line = Form(
+            LINE_FIELDS,
+            self._edit,
+            second_column={
+                "terminal_positions",
+                "intermediate",
+                "homogeneous_dwell_s",
+                "board",
+                "alight",
+                "stop_positions",
+                "stop_clearance_s",
+                "movement_penalty_s",
+                "exchange",
+                "passenger_units",
+                "initial_pax",
+                "initial_reverse_pax",
+                "cable_spacing_m",
+                "cable_min_spacing_m",
+                "cable_circuit_km",
+                "cable_station_s",
+                "cable_station_limit",
+            },
+        )
         service_panel = QWidget()
         service_layout = QVBoxLayout(service_panel)
         self.systems = QComboBox()
@@ -340,21 +365,27 @@ class LineEditor(QWidget):
         self.vehicles.setAccessibleName("Vehículo de referencia")
         self.vehicles.activated.connect(self._apply)
         vehicle_layout.addWidget(self.vehicles)
+        self.source_button = button("Consultar fuente", self._open_source)
         vehicle_layout.addWidget(
             row(
                 button("Aplicar ficha seleccionada", self._apply),
                 button("Guardar vehículo de usuario…", self._save_vehicle),
+                self.source_button,
             )
         )
         self.vehicle_source = label("")
         vehicle_layout.addWidget(self.vehicle_source)
-        self.source_button = button("Consultar fuente", self._open_source)
-        vehicle_layout.addWidget(self.source_button)
         self.vehicle = Form(VEHICLE_FIELDS, self._edit)
-        vehicle_layout.addWidget(self.vehicle)
         self.doors = VehicleDoors()
         self.doors.changed.connect(self._edit)
-        vehicle_layout.addWidget(self.doors)
+        vehicle_layout.addWidget(
+            AdaptiveColumns(
+                self.vehicle,
+                self.doors,
+                minimum_width=800,
+                stretches=(2, 3),
+            )
+        )
         self.sections.addTab(scroll(vehicle_panel), "Vehículo y puertas")
         self.station_tables = []
         station_panel = QWidget()
@@ -366,19 +397,25 @@ class LineEditor(QWidget):
                 "Una tabla vacía emplea el modelo homogéneo."
             )
         )
+        directions = QTabWidget()
+        directions.setDocumentMode(True)
+        station_layout.addWidget(directions, 1)
         for name in ("Ida", "Regreso"):
-            station_layout.addWidget(label(name, "sectionTitle"))
+            direction = QWidget()
+            direction_layout = QVBoxLayout(direction)
+            direction_layout.setContentsMargins(0, 0, 0, 0)
             widget = table(STATION_HEADERS)
             widget.cellChanged.connect(self._edit)
             self.station_tables.append(widget)
-            station_layout.addWidget(widget)
-            station_layout.addWidget(
+            direction_layout.addWidget(
                 row(
                     button("Agregar estación", lambda _, w=widget: self._station_row(w, False)),
                     button("Eliminar estación", lambda _, w=widget: self._station_row(w, True)),
                     button("Ordenar por km", lambda _, w=widget: self._sort_stations(w)),
                 )
             )
+            direction_layout.addWidget(widget, 1)
+            directions.addTab(direction, name)
         self.sections.addTab(scroll(station_panel), "Estaciones")
         self.set_state({})
 

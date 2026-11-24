@@ -100,6 +100,24 @@ QTabWidget::pane {
     border: 0;
     background: #F5F5F5;
 }
+QToolBar#workspaceToolbar {
+    padding: 3px 9px;
+}
+QTabBar#workspaceNavigation {
+    font-size: 9pt;
+}
+QTabBar#workspaceNavigation::tab {
+    padding: 7px 5px;
+}
+QWidget#publicTransport QTabBar::tab {
+    padding: 6px 10px;
+}
+QWidget#publicTransport QLabel#infoBanner {
+    padding: 6px 9px;
+}
+QTabBar#transitPanelTabs::tab:disabled {
+    color: #9AA0A6;
+}
 QTabBar::tab {
     background: transparent;
     color: #5F6368;
@@ -137,6 +155,17 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDateEdit, QTextEdit, QPlainText
     border-radius: 5px;
     padding: 6px;
     selection-background-color: #4B5057;
+    selection-color: #FFFFFF;
+}
+QComboBox {
+    combobox-popup: 0;
+    qproperty-maxVisibleItems: 1000;
+}
+QComboBox QAbstractItemView {
+    background: #FFFFFF;
+    color: #202124;
+    border: 1px solid #BFC2C5;
+    selection-background-color: #3F444B;
     selection-color: #FFFFFF;
 }
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDateEdit {
@@ -323,6 +352,8 @@ def set_theme(dark: bool) -> None:
             background: #405b77; border-color: #65758a; color: #ffffff;
         }
         QPushButton#primaryButton:hover { background: #496483; }
-        QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { selection-color: #ffffff; }
+        QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QComboBox QAbstractItemView {
+            selection-color: #ffffff;
+        }
         """
     app.setStyleSheet(stylesheet)

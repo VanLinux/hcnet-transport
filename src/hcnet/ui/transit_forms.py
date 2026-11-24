@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from hcnet.ui.transit_layout import AdaptiveColumns
+
 
 def label(text, name="pageSubtitle"):
     widget = QLabel(text)
@@ -36,14 +38,18 @@ def scroll(page):
     return area
 
 
-def row(*widgets):
-    box = QWidget()
-    layout = QHBoxLayout(box)
+def row(*widgets, wrap=True):
+    if wrap:
+        bar = AdaptiveColumns(*widgets, stretches=(0,) * len(widgets))
+        bar.columns.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        return bar
+    bar = QWidget()
+    layout = QHBoxLayout(bar)
     layout.setContentsMargins(0, 0, 0, 0)
     for widget in widgets:
         layout.addWidget(widget)
     layout.addStretch()
-    return box
+    return bar
 
 
 def button(title, action):
@@ -57,7 +63,9 @@ def table(headers, *, editable=True):
     widget.setHorizontalHeaderLabels(headers)
     widget.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     widget.horizontalHeader().setMinimumSectionSize(75)
-    widget.horizontalHeader().setDefaultSectionSize(132)
+    header = widget.horizontalHeader()
+    for index, title in enumerate(headers):
+        widget.setColumnWidth(index, max(132, header.fontMetrics().horizontalAdvance(title) + 25))
     widget.verticalHeader().setDefaultSectionSize(29)
     widget.setMinimumHeight(155)
     if not editable:
@@ -121,12 +129,22 @@ def intervals(text):
 
 
 class Form(QWidget):
-    def __init__(self, specs, edited):
+    def __init__(self, specs, edited, *, second_column=()):
         super().__init__()
-        self.form = QFormLayout(self)
-        self.form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        self.form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.controls = {}
+        self.forms = {}
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        columns = (QWidget(), QWidget()) if second_column else (QWidget(),)
+        forms = []
+        for column in columns:
+            form = QFormLayout(column)
+            form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+            form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+            forms.append(form)
+        layout.addWidget(
+            AdaptiveColumns(*columns, minimum_width=780) if second_column else columns[0]
+        )
         for key, title, initial, tip in specs:
             if isinstance(initial, tuple):
                 widget = QComboBox()
@@ -143,7 +161,9 @@ class Form(QWidget):
             widget.setToolTip(tip or title)
             widget.setAccessibleName(title)
             self.controls[key] = widget
-            self.form.addRow(title, widget)
+            form = forms[int(key in second_column)]
+            form.addRow(title, widget)
+            self.forms[key] = form
 
     def value(self, key):
         widget = self.controls[key]
@@ -176,7 +196,7 @@ class Form(QWidget):
 
     def visible(self, keys, visible):
         for key in keys:
-            self.form.setRowVisible(self.controls[key], visible)
+            self.forms[key].setRowVisible(self.controls[key], visible)
 
 
 class TransitPlot(QWidget):
@@ -257,14 +277,18 @@ class ResultPanel(QWidget):
         self.title = label("", "sectionTitle")
         self.notes = label("")
         self.metrics = table(("Indicador", "Resultado"), editable=False)
-        self.metrics.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.metrics.verticalHeader().hide()
+        self.metrics.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.metrics.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.ResizeToContents
+        )
         self.plot = TransitPlot()
         self.tables = QVBoxLayout()
         layout.addWidget(self.title)
         layout.addWidget(self.notes)
-        layout.addWidget(self.metrics)
-        layout.addWidget(self.plot)
+        layout.addWidget(AdaptiveColumns(self.metrics, self.plot, minimum_width=880))
         layout.addLayout(self.tables)
+        layout.addStretch()
         self.show_record(None)
 
     def show_record(self, record):

@@ -4,6 +4,9 @@ Todos los cambios relevantes de HCNet Transport se documentan en este archivo.
 
 ## 3.5.0
 
+- Navegación directa entre áreas de trabajo en la barra superior.
+- Captura y resultados de transporte público en paneles ampliables o en paralelo. Formularios adaptables y estaciones en pestañas por sentido.
+- Desplegables que muestran todas las opciones cuando caben en la pantalla.
 - Transporte público con cálculo específico, análisis integral y recomendación preliminar de tecnología.
 - Ocho sistemas y 16 fichas vehiculares con fuentes. Fichas de usuario reutilizables y editor gráfico de puertas por carro.
 - Dimensionamiento de frecuencia, oferta y flota. Perfiles de carga por sentido, estaciones, esquema propio para telecabinas, espera y evaluación económica.

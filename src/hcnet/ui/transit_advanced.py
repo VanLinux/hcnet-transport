@@ -26,6 +26,7 @@ from hcnet.ui.transit_forms import (
     scroll,
     table,
 )
+from hcnet.ui.transit_layout import AdaptiveColumns
 
 INFRASTRUCTURE = tuple(dict.fromkeys(s["infrastructure"] for s in catalog()))
 ROAD_FIELDS = [
@@ -118,16 +119,27 @@ class RoadTool(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(label("Congestión vial: trabaja con flujos y tiempos de un mismo tramo."))
         self.form = Form(ROAD_FIELDS, self.changed.emit)
-        layout.addWidget(self.form)
         self.observations = table(("Flujo (veh/h)", "Tiempo (min)", "Muestra: ajuste o validación"))
         self.observations.cellChanged.connect(lambda *_: self.changed.emit())
-        layout.addWidget(self.observations)
-        layout.addWidget(
+        table_panel = QWidget()
+        table_layout = QVBoxLayout(table_panel)
+        table_layout.setContentsMargins(0, 0, 0, 0)
+        table_layout.addWidget(
             row(
                 button("Agregar observación", self._add),
                 button("Eliminar observación", self._remove),
                 button("Importar CSV…", self._import),
             )
+        )
+        table_layout.addWidget(self.observations, 1)
+        layout.addWidget(
+            AdaptiveColumns(
+                self.form,
+                table_panel,
+                minimum_width=850,
+                stretches=(2, 3),
+            ),
+            1,
         )
         layout.addWidget(
             label(
@@ -317,15 +329,26 @@ class TechnologyTool(QWidget):
         layout = QVBoxLayout(self)
         self.form = Form(REC_FIELDS, self.changed.emit)
         layout.addWidget(label("Infraestructura de referencia: " + ", ".join(INFRASTRUCTURE) + "."))
-        layout.addWidget(self.form)
         self.candidates = table(REC_HEADERS)
         self.candidates.cellChanged.connect(lambda *_: self.changed.emit())
-        layout.addWidget(self.candidates)
-        layout.addWidget(
+        table_panel = QWidget()
+        table_layout = QVBoxLayout(table_panel)
+        table_layout.setContentsMargins(0, 0, 0, 0)
+        table_layout.addWidget(
             row(
                 button("Agregar los ocho sistemas", self._add),
                 button("Agregar alternativa", self._blank),
             )
+        )
+        table_layout.addWidget(self.candidates, 1)
+        layout.addWidget(
+            AdaptiveColumns(
+                self.form,
+                table_panel,
+                minimum_width=850,
+                stretches=(2, 3),
+            ),
+            1,
         )
         layout.addWidget(
             label(
@@ -607,7 +630,9 @@ class AdvancedTools(QWidget):
         self.baseline = None
         self.original_line = None
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
         layout.addWidget(self.tabs)
         self.road = RoadTool()
         self.road.changed.connect(self.changed)

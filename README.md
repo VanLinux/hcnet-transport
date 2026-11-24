@@ -82,7 +82,10 @@ predimensionamiento. Véase [la metodología](docs/METHODOLOGY.md#14-rotondas).
 
 ## Transporte público en 3.5.0
 
-Abre **Transporte público** y selecciona un tipo de análisis.
+En la barra superior, elige **Transporte público** y selecciona un tipo de análisis.
+Pulsa **Captura** o **Resultados** para ampliar ese panel. En ventanas anchas,
+**En paralelo** muestra ambos paneles y puedes ajustar el ancho de cada uno.
+En **Estaciones**, elige **Ida** o **Regreso** para editar el sentido correspondiente.
 
 | Modalidad | Para qué sirve |
 |---|---|
@@ -99,8 +102,8 @@ se conservan por referencia y huella SHA-256. Guarda sus archivos por separado s
 vas a repetir el experimento en otra computadora.
 
 El informe integral se exporta desde **Configuración y operación**, después de
-calcular la línea y los análisis avanzados aplicados. El selector superior permite
-reabrir el cálculo de línea vial de la versión 3.4 y consultar sus proyectos anteriores.
+calcular la línea y los análisis avanzados aplicados. El selector de herramientas
+permite abrir **Cálculo de línea vial** y consultar sus proyectos anteriores.
 
 [Metodología de transporte público](docs/METHODOLOGY.md#transporte-público-350) ·
 [Fuentes de las fichas](docs/TRANSIT_CATALOG.md)

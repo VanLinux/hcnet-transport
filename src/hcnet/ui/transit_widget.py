@@ -10,14 +10,11 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QGroupBox,
-    QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
-    QScrollArea,
     QSpinBox,
-    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -28,6 +25,9 @@ from hcnet.domain.transit import TransitLineInput, TransitLineResult
 from hcnet.ui.charts import TransitCongestionChart
 from hcnet.ui.styles import COLORS
 from hcnet.ui.transit_engineering import TransitEngineering
+from hcnet.ui.transit_forms import row as action_row
+from hcnet.ui.transit_forms import scroll
+from hcnet.ui.transit_layout import AdaptiveColumns, TransitPages, TransitPanels
 
 
 class _TransitMetric(QFrame):
@@ -38,6 +38,7 @@ class _TransitMetric(QFrame):
         layout.setContentsMargins(13, 10, 13, 10)
         self.label = QLabel(label)
         self.label.setObjectName("metricLabel")
+        self.label.setWordWrap(True)
         self.value = QLabel("—")
         self.value.setObjectName("metricValue")
         self.detail = QLabel("")
@@ -95,46 +96,46 @@ class PublicTransportTab(QWidget):
         return widget
 
     def _build_ui(self) -> None:
+        self.setObjectName("publicTransport")
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
         self.workspace = QComboBox()
         self.workspace.setAccessibleName("Herramienta de transporte público")
-        self.workspace.addItems(("Herramientas de transporte público", "Cálculo de línea vial 3.4"))
-        outer_layout.addWidget(self.workspace)
-        self.pages = QStackedWidget()
-        outer_layout.addWidget(self.pages)
+        self.workspace.addItems(("Herramientas de transporte público", "Cálculo de línea vial"))
+        tools = QWidget()
+        tools_layout = QVBoxLayout(tools)
+        tools_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.addWidget(
+            AdaptiveColumns(
+                self.workspace,
+                tools,
+                minimum_width=740,
+                stretches=(2, 5),
+            )
+        )
+        self.pages = TransitPages()
+        self.viewport = scroll(self.pages)
+        outer_layout.addWidget(self.viewport, 1)
         self.engineering = TransitEngineering()
         self.pages.addWidget(self.engineering)
+        tools_layout.addWidget(self.engineering.toolbar)
         self.workspace.currentIndexChanged.connect(self.pages.setCurrentIndex)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 12, 0, 14)
-        layout.setSpacing(10)
-
-        heading = QHBoxLayout()
-        title_box = QVBoxLayout()
-        title = QLabel("Planeación de transporte público")
-        title.setObjectName("sectionTitle")
-        subtitle = QLabel(
-            "Dimensiona operación, flota y paradas; después compara la respuesta vial "
-            "de cuatro funciones de congestión."
-        )
-        subtitle.setObjectName("pageSubtitle")
-        subtitle.setWordWrap(True)
-        title_box.addWidget(title)
-        title_box.addWidget(subtitle)
-        heading.addLayout(title_box)
-        heading.addStretch()
         calculate_button = QPushButton("Calcular línea")
         calculate_button.setObjectName("primaryButton")
         calculate_button.clicked.connect(self.calculate_requested.emit)
-        heading.addWidget(calculate_button)
         export_button = QPushButton("Exportar reporte .tex")
         export_button.clicked.connect(self.export_requested.emit)
-        heading.addWidget(export_button)
-        layout.addLayout(heading)
+        line_tools = action_row(calculate_button, export_button)
+        tools_layout.addWidget(line_tools)
+        line_tools.hide()
+        self.workspace.currentIndexChanged.connect(
+            lambda index: self.engineering.toolbar.setVisible(index == 0)
+        )
+        self.workspace.currentIndexChanged.connect(lambda index: line_tools.setVisible(index == 1))
+        capture = QWidget()
+        capture_layout = QVBoxLayout(capture)
+        results = QWidget()
+        result_layout = QVBoxLayout(results)
 
         banner = QLabel(
             "La velocidad de operación representa el recorrido entre paradas. La velocidad "
@@ -143,16 +144,16 @@ class PublicTransportTab(QWidget):
         )
         banner.setObjectName("infoBanner")
         banner.setWordWrap(True)
-        layout.addWidget(banner)
-
-        inputs = QGridLayout()
-        inputs.setHorizontalSpacing(10)
-        inputs.addWidget(self._build_service_box(), 0, 0)
-        inputs.addWidget(self._build_stops_box(), 0, 1)
-        inputs.addWidget(self._build_congestion_box(), 1, 0, 1, 2)
-        inputs.setColumnStretch(0, 1)
-        inputs.setColumnStretch(1, 1)
-        layout.addLayout(inputs)
+        capture_layout.addWidget(banner)
+        capture_layout.addWidget(
+            AdaptiveColumns(
+                self._build_service_box(),
+                self._build_stops_box(),
+                minimum_width=700,
+            )
+        )
+        capture_layout.addWidget(self._build_congestion_box())
+        capture_layout.addStretch()
 
         results_box = QGroupBox("Resultados operacionales")
         results_layout = QVBoxLayout(results_box)
@@ -179,7 +180,7 @@ class PublicTransportTab(QWidget):
         ):
             cards.addWidget(metric, index // 2, index % 2)
         results_layout.addLayout(cards)
-        layout.addWidget(results_box)
+        result_layout.addWidget(results_box)
 
         comparison_box = QGroupBox("Análisis oferta–demanda y congestión")
         comparison_layout = QVBoxLayout(comparison_box)
@@ -204,7 +205,7 @@ class PublicTransportTab(QWidget):
         self.diagnosis.setObjectName("warningBanner")
         self.diagnosis.setWordWrap(True)
         comparison_layout.addWidget(self.diagnosis)
-        layout.addWidget(comparison_box)
+        result_layout.addWidget(comparison_box)
 
         note = QLabel(
             "El espaciamiento óptimo equilibra acceso peatonal y penalización por parada. "
@@ -213,14 +214,15 @@ class PublicTransportTab(QWidget):
         )
         note.setObjectName("pageSubtitle")
         note.setWordWrap(True)
-        layout.addWidget(note)
-
-        scroll.setWidget(page)
-        self.pages.addWidget(scroll)
+        result_layout.addWidget(note)
+        result_layout.addStretch()
+        self.line_panels = TransitPanels(scroll(capture), scroll(results))
+        self.pages.addWidget(self.line_panels)
 
     def _build_service_box(self) -> QGroupBox:
         box = QGroupBox("Servicio, demanda y flota")
         form = QFormLayout(box)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.line_name = QLineEdit()
         self.route_length = self._double(0.1, 1000, 2, " km", 0.5)
         self.stop_count = self._integer(2, 1000, " / sentido")
@@ -246,6 +248,7 @@ class PublicTransportTab(QWidget):
     def _build_stops_box(self) -> QGroupBox:
         box = QGroupBox("Paradas, acceso e intercambio")
         form = QFormLayout(box)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.walking_speed = self._double(0.1, 3, 2, " m/s", 0.05)
         self.average_trip = self._double(0.1, 1000, 2, " km", 0.5)
         self.boardings = self._double(0, 1000, 1, " pax/parada", 1)
@@ -275,7 +278,7 @@ class PublicTransportTab(QWidget):
 
     def _build_congestion_box(self) -> QGroupBox:
         box = QGroupBox("Oferta vial y funciones de congestión")
-        grid = QGridLayout(box)
+        layout = QVBoxLayout(box)
         self.background_flow = self._double(0, 100000, 0, " veh/h", 50)
         self.road_capacity = self._double(1, 100000, 0, " veh/h", 50)
         self.bus_pce = self._double(0.1, 20, 2, " veh eq/bus", 0.1)
@@ -294,11 +297,14 @@ class PublicTransportTab(QWidget):
             ("Davidson, J:", self.davidson_j),
             ("Exponencial, α:", self.exponential_alpha),
         )
-        for index, (label, widget) in enumerate(widgets):
-            pair = index % 2
-            row = index // 2
-            grid.addWidget(QLabel(label), row, pair * 2)
-            grid.addWidget(widget, row, pair * 2 + 1)
+        inputs = [QWidget(), QWidget()]
+        for panel, fields in zip(inputs, (widgets[:4], widgets[4:]), strict=True):
+            form = QFormLayout(panel)
+            form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+            form.setContentsMargins(0, 0, 0, 0)
+            for title, widget in fields:
+                form.addRow(title, widget)
+        layout.addWidget(AdaptiveColumns(*inputs, minimum_width=530))
         return box
 
     def _all_inputs(self) -> tuple[QWidget, ...]:

@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QStackedWidget,
+    QTabBar,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -116,6 +117,12 @@ class MetricCard(QFrame):
 class MainWindow(QMainWindow):
     PROJECT_FILTER = "Proyecto HCNet (*.hcnet)"
     OPEN_FILTER = PROJECT_FILTER + ";;Proyectos anteriores (*.hcnet.json *.json)"
+    WORKSPACES = (
+        ("help", "Inicio y alcance"),
+        ("signal", "Intersección semaforizada"),
+        ("roundabout", "Rotonda"),
+        ("transit", "Transporte público"),
+    )
     PANEL_WIDTHS = (520, 320, 160)
     QT_MAX_WIDGET_HEIGHT = (1 << 24) - 1
 
@@ -140,7 +147,7 @@ class MainWindow(QMainWindow):
         self._create_menu_and_toolbar()
         self._build_ui()
         self._load_project_into_ui(self.project)
-        self.workspace_choice.setCurrentIndex(self.workspace_choice.findData("help"))
+        self._select_workspace("help")
         self._set_theme(QSettings("VanLinux", "HCNet Transport").value("dark", False, type=bool))
 
     @staticmethod
@@ -224,25 +231,31 @@ class MainWindow(QMainWindow):
         help_menu = self.menuBar().addMenu("Ayuda")
         help_menu.addAction(self.about_action)
 
-        toolbar = QToolBar("Herramientas principales")
+        toolbar = QToolBar("Áreas de trabajo")
+        toolbar.setObjectName("workspaceToolbar")
         toolbar.setMovable(False)
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        toolbar.addActions([self.new_action, self.open_action, self.save_action])
-        toolbar.addSeparator()
-        toolbar.addAction(self.calculate_action)
-        toolbar.addSeparator()
-        toolbar.addAction(self.export_action)
+        toolbar.setFloatable(False)
+        toolbar.setContextMenuPolicy(Qt.ContextMenuPolicy.PreventContextMenu)
+        toolbar.setAllowedAreas(Qt.ToolBarArea.TopToolBarArea)
+        self.workspace_nav = QTabBar()
+        self.workspace_nav.setObjectName("workspaceNavigation")
+        self.workspace_nav.setAccessibleName("Área de trabajo")
+        self.workspace_nav.setDrawBase(False)
+        self.workspace_nav.setExpanding(False)
+        self.workspace_nav.setElideMode(Qt.TextElideMode.ElideNone)
+        self.workspace_nav.setUsesScrollButtons(True)
+        for key, title in self.WORKSPACES:
+            i = self.workspace_nav.addTab(title)
+            self.workspace_nav.setTabData(i, key)
+            self.workspace_nav.setTabToolTip(i, title)
+        toolbar.addWidget(self.workspace_nav)
         self.addToolBar(toolbar)
 
     def _build_ui(self) -> None:
         central = QWidget()
         root = QVBoxLayout(central)
-        root.setContentsMargins(22, 18, 22, 12)
+        root.setContentsMargins(16, 10, 16, 10)
         root.setSpacing(12)
-
-        self.page_title = QLabel("HCNet Transport")
-        self.page_title.setObjectName("pageTitle")
-        root.addWidget(self.page_title)
 
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
@@ -265,21 +278,10 @@ class MainWindow(QMainWindow):
         self.roundabout_tab.export_requested.connect(self._export_roundabout)
         self.results_tab = self._build_results_tab()
         self.trace_tab = self._build_trace_tab()
-        self.workspace_choice = QComboBox()
-        self.workspace_choice.addItem("↔ Intersección semaforizada", "signal")
-        self.workspace_choice.addItem("◇ Rotonda de un carril", "roundabout")
-        self.workspace_choice.addItem("◇ Transporte público", "transit")
-        self.workspace_choice.addItem("Inicio y alcance", "help")
-        self.workspace_choice.setAccessibleName("Tipo de análisis")
-        self.workspace_choice.currentIndexChanged.connect(self._workspace_changed)
-        toolbar = QHBoxLayout()
-        toolbar.addWidget(self.workspace_choice, 1)
         self.compact_view = QComboBox()
         self.compact_view.addItems(["Captura", "Esquema y resumen", "Resultados y reporte"])
         self.compact_view.setAccessibleName("Panel visible de intersección")
         self.compact_view.currentIndexChanged.connect(self._update_display)
-        toolbar.addWidget(self.compact_view)
-        root.addLayout(toolbar)
 
         for widget, label in (
             (self.project_tab, "Proyecto"), (self.geometry_tab, "Geometría"),
@@ -310,17 +312,19 @@ class MainWindow(QMainWindow):
         signal_layout = QVBoxLayout(self.signal_workspace)
         signal_layout.setContentsMargins(0, 0, 0, 0)
         signal_layout.setSpacing(6)
+        signal_layout.addWidget(self.compact_view)
         signal_layout.addWidget(self.analysis_split, 1)
         signal_layout.addWidget(self.detail_tabs, 1)
         self.workspaces = QStackedWidget()
         for widget in (
-            self.signal_workspace, self.roundabout_tab, self.transit_tab, self.scope_tab,
+            self.scope_tab, self.signal_workspace, self.roundabout_tab, self.transit_tab,
         ):
             self.workspaces.addWidget(widget)
         root.addWidget(self.workspaces, 1)
 
         self.setCentralWidget(central)
-        self._update_display()
+        self.workspace_nav.currentChanged.connect(self._workspace_changed)
+        self._workspace_changed(self.workspace_nav.currentIndex())
         self.statusBar().showMessage("HCNet Transport listo")
 
     def resizeEvent(self, event) -> None:  # noqa: N802, ANN001
@@ -333,8 +337,7 @@ class MainWindow(QMainWindow):
         changed = self._compact != compact
         self._compact = compact
         view = self.compact_view.currentIndex()
-        self.page_title.setVisible(not compact)
-        self.compact_view.setVisible(compact and self.workspace_choice.currentData() == "signal")
+        self.compact_view.setVisible(compact)
         self.tabs.setVisible(not compact or view == 0)
         show_sketch = view == 1 if compact else view != 2
         self.live_sketch.setVisible(show_sketch)
@@ -422,8 +425,14 @@ class MainWindow(QMainWindow):
         style.unpolish(self.summary_status)
         style.polish(self.summary_status)
 
+    def _select_workspace(self, key: str) -> None:
+        index = next((i for i, (name, _) in enumerate(self.WORKSPACES) if name == key), 1)
+        self.workspace_nav.setCurrentIndex(index)
+
     def _workspace_changed(self, index: int) -> None:
-        workspace = self.workspace_choice.itemData(index)
+        if index < 0:
+            return
+        workspace = self.workspace_nav.tabData(index)
         self.workspaces.setCurrentIndex(index)
         self._update_display()
         self.calculate_action.setEnabled(workspace != "help")
@@ -1147,7 +1156,8 @@ class MainWindow(QMainWindow):
             transit_engineering=self.transit_tab.engineering.snapshot()
             | {"workspace": self.transit_tab.workspace.currentIndex()},
             workspace=(
-                self.workspace_choice.currentData() if self.workspace_choice.currentData() != "help"
+                self.workspace_nav.tabData(self.workspace_nav.currentIndex())
+                if self.workspaces.currentWidget() is not self.scope_tab
                 else self.project.workspace
             ),
             notes=self.project_notes.toPlainText().strip(),
@@ -1184,9 +1194,7 @@ class MainWindow(QMainWindow):
             project.transit_engineering.get("workspace", legacy)
         )
         self.roundabout_tab.set_input(project.roundabout)
-        self.workspace_choice.setCurrentIndex(max(0, self.workspace_choice.findData(
-            project.workspace
-        )))
+        self._select_workspace(project.workspace)
         self._refresh_input_table()
         self._refresh_signal_table()
         self.sketch.set_project(project)

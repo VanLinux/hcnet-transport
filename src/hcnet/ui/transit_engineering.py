@@ -4,12 +4,11 @@ import csv
 from copy import deepcopy
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QInputDialog,
-    QSplitter,
     QStackedWidget,
     QTabWidget,
     QVBoxLayout,
@@ -20,6 +19,7 @@ from hcnet.domain.transit_examples import DEMONSTRATIONS, demonstration
 from hcnet.domain.transit_planning import SPECIFIC, specific
 from hcnet.ui.transit_advanced import AdvancedTools, RoadTool, TechnologyTool
 from hcnet.ui.transit_forms import Form, ResultPanel, button, intervals, label, row, scroll
+from hcnet.ui.transit_layout import AdaptiveColumns, TransitPanels
 from hcnet.ui.transit_line import LineEditor
 
 
@@ -115,28 +115,26 @@ class TransitEngineering(QWidget):
         self.demo_name = ""
         self.results_key = None
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         self.modes = QComboBox()
         self.modes.setAccessibleName("Modalidad de transporte público")
         self.modes.addItems(self.MODES)
-        layout.addWidget(self.modes)
-        layout.addWidget(
-            row(
-                button("Cargar caso demostrativo…", self._choose_demo),
-                button("Calcular", self.run_current),
-            )
+        calculate = button("Calcular", self.run_current)
+        calculate.setObjectName("primaryButton")
+        self.toolbar = AdaptiveColumns(
+            self.modes,
+            row(calculate, button("Cargar caso demostrativo…", self._choose_demo), wrap=False),
+            stretches=(2, 3),
         )
         self.status = label("", "infoBanner")
         self.status.hide()
         layout.addWidget(self.status)
-        self.splitter = QSplitter(Qt.Orientation.Vertical)
-        self.splitter.setChildrenCollapsible(False)
-        layout.addWidget(self.splitter, 1)
         self.inputs = QStackedWidget()
-        self.splitter.addWidget(self.inputs)
         self.specific = SpecificTool()
         self.inputs.addWidget(self.specific)
         self.specific.changed.connect(self._specific_edited)
         self.integral = QTabWidget()
+        self.integral.setDocumentMode(True)
         self.line = LineEditor()
         self.integral.addTab(self.line, "Configuración y operación")
         self.line.changed.connect(self._line_edited)
@@ -148,16 +146,16 @@ class TransitEngineering(QWidget):
         self.technology = TechnologyTool()
         self.technology.changed.connect(lambda: self._edited("technology"))
         self.inputs.addWidget(scroll(self.technology))
-        bottom = QWidget()
-        footer = QVBoxLayout(bottom)
+        results_page = QWidget()
+        footer = QVBoxLayout(results_page)
         footer.setContentsMargins(0, 0, 0, 0)
         self.export_tex = button("Exportar reporte .tex…", self._tex)
         self.export_csv = button("Exportar resultados .csv…", self._csv)
         footer.addWidget(row(self.export_tex, self.export_csv))
         self.results = ResultPanel()
         footer.addWidget(scroll(self.results), 1)
-        self.splitter.addWidget(bottom)
-        self.splitter.setSizes([460, 230])
+        self.panels = TransitPanels(self.inputs, results_page)
+        layout.addWidget(self.panels, 1)
         self.modes.currentIndexChanged.connect(self._switch)
         self.integral.currentChanged.connect(self._switch)
         self.advanced.tabs.currentChanged.connect(self._switch)

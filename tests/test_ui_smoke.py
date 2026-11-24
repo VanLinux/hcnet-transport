@@ -28,7 +28,7 @@ def app() -> QApplication:
 def test_main_window_calculates_demo_and_populates_views(app: QApplication) -> None:
     window = MainWindow()
     assert window.workspaces.currentWidget() is window.scope_tab
-    assert window.workspace_choice.currentData() == "help"
+    assert window.workspace_nav.tabData(window.workspace_nav.currentIndex()) == "help"
     assert not window.calculate_action.isEnabled()
     assert not window.dirty
     assert not window.project.lane_groups
@@ -48,8 +48,9 @@ def test_main_window_calculates_demo_and_populates_views(app: QApplication) -> N
     assert window.tabs.widget(0) is window.project_tab
     assert window.tabs.tabText(3) == "↔ Semaforización"
     assert window.detail_tabs.tabText(2) == "Reporte técnico"
-    assert window.workspace_choice.itemText(1) == "◇ Rotonda de un carril"
-    assert window.workspace_choice.itemText(2) == "◇ Transporte público"
+    assert [window.workspace_nav.tabText(i) for i in range(window.workspace_nav.count())] == [
+        "Inicio y alcance", "Intersección semaforizada", "Rotonda", "Transporte público",
+    ]
     assert __version__ in window.windowTitle()
     assert window.last_transit_result is not None
     assert window.transit_tab.congestion_table.rowCount() == 4
@@ -116,7 +117,7 @@ def test_readable_fields_in_small_window(app: QApplication) -> None:
     window = MainWindow()
     window.setStyleSheet(APP_STYLESHEET)
     window.resize(640, 400)
-    window.workspace_choice.setCurrentIndex(window.workspace_choice.findData("signal"))
+    window._select_workspace("signal")
     window.tabs.setCurrentWidget(window.project_tab)
     window.show()
     app.processEvents()
@@ -131,7 +132,7 @@ def test_readable_fields_in_small_window(app: QApplication) -> None:
 def test_selected_tab_expands_its_panel_and_keeps_other_tabs_reachable(app: QApplication) -> None:
     window = MainWindow()
     window.resize(1240, 780)
-    window.workspace_choice.setCurrentIndex(window.workspace_choice.findData("signal"))
+    window._select_workspace("signal")
     window.show()
     app.processEvents()
     upper_bar = window.tabs.tabBar()
@@ -221,7 +222,7 @@ def test_phase_edit_marks_baseline_stale_and_keeps_archived_comparison(app: QApp
     window._advance_cycle()
     assert window.live_sketch.active_phase == initial[1].number
     window._set_theme(True)
-    window.workspace_choice.setCurrentIndex(2)
+    window._select_workspace("transit")
     assert window.workspaces.currentWidget() is window.transit_tab
     window._set_theme(False)
     window.dirty = False
@@ -255,12 +256,12 @@ def test_wheel_scrolls_form_and_leaves_focused_controls_unchanged(app: QApplicat
     QTest.keyClick(field, Qt.Key.Key_Up)
     assert field.value() == pytest.approx(original_cycle + field.singleStep())
 
-    picker = window.workspace_choice
+    picker = window.workspace_nav
     picker.setFocus()
     index = picker.currentIndex()
     scroll_over(picker)
     assert picker.currentIndex() == index
-    QTest.keyClick(picker, Qt.Key.Key_Down)
+    QTest.keyClick(picker, Qt.Key.Key_Right)
     assert picker.currentIndex() == index + 1
     scroll_over(window.roundabout_tab.circulation)
     assert window.roundabout_tab.circulation.currentIndex() == 0
@@ -306,7 +307,7 @@ def test_transport_engineering_modes_demos_and_reopen(app, tmp_path):
 
     window = MainWindow()
     window.resize(1010, 720)
-    window.workspace_choice.setCurrentIndex(window.workspace_choice.findData("transit"))
+    window._select_workspace("transit")
     window.show()
     module = window.transit_tab.engineering
     assert module.line.line.value("length_km") == ""
@@ -332,5 +333,103 @@ def test_transport_engineering_modes_demos_and_reopen(app, tmp_path):
     assert "letterpaper" in document and "inputenc" not in document
     assert "\\begin{picture}" in document
     assert window.workspaces.currentWidget() is window.transit_tab
+    window.dirty = False
+    window.close()
+
+
+def test_navigation_and_transit_panels_use_available_width(app):
+    from PySide6.QtWidgets import QPushButton, QToolBar
+
+    window = MainWindow()
+    window.resize(1240, 720)
+    window.show()
+    app.processEvents()
+    nav = window.workspace_nav
+    toolbar = window.findChild(QToolBar)
+    assert nav.parentWidget() is toolbar
+    assert window.save_action not in toolbar.actions()
+    assert window.calculate_action not in toolbar.actions()
+
+    def click_tab(bar, index):
+        QTest.mouseClick(bar, Qt.MouseButton.LeftButton, pos=bar.tabRect(index).center())
+        app.processEvents()
+
+    for key, page in (
+        ("signal", window.signal_workspace), ("roundabout", window.roundabout_tab),
+        ("help", window.scope_tab), ("transit", window.transit_tab),
+    ):
+        index = next(i for i in range(nav.count()) if nav.tabData(i) == key)
+        click_tab(nav, index)
+        assert window.workspaces.currentWidget() is page
+        assert window.calculate_action.isEnabled() == (key != "help")
+
+    transit = window.transit_tab
+    for index, panels in ((0, transit.engineering.panels), (1, transit.line_panels)):
+        transit.workspace.setCurrentIndex(index)
+        app.processEvents()
+        assert panels.tabs.currentIndex() == panels.PARALLEL
+        assert panels.capture.width() > panels.results.width() > 0
+        assert panels.capture.geometry().top() == panels.results.geometry().top()
+        panels.splitter.setSizes([560, 600])
+        panels.splitter.splitterMoved.emit(560, 1)
+        remembered = panels.splitter.sizes()
+        click_tab(panels.tabs, panels.RESULTS)
+        assert panels.results.width() == panels.splitter.width()
+        assert not panels.capture.isVisible() and panels.tabs.isVisible()
+        click_tab(panels.tabs, panels.CAPTURE)
+        assert panels.capture.width() == panels.splitter.width()
+        assert not panels.results.isVisible() and panels.tabs.isVisible()
+        click_tab(panels.tabs, panels.PARALLEL)
+        assert panels.splitter.sizes() == remembered
+
+        window.resize(640, 400)
+        app.processEvents()
+        assert not panels.tabs.isTabEnabled(panels.PARALLEL)
+        assert panels.capture.width() == panels.splitter.width()
+        assert not panels.results.isVisible()
+        window.resize(1240, 720)
+        app.processEvents()
+        assert panels.tabs.currentIndex() == panels.PARALLEL
+        assert panels.splitter.sizes() == remembered
+
+    transit.workspace.setCurrentIndex(0)
+    transit.engineering.modes.setCurrentIndex(1)
+    window.resize(480, 330)
+    app.processEvents()
+    assert nav.tabRect(nav.count() - 1).right() < nav.width()
+    assert transit.viewport.verticalScrollBar().maximum() > 0
+    form_view = transit.engineering.line.sections.currentWidget()
+    assert form_view.viewport().height() > 70
+    for action in transit.engineering.toolbar.findChildren(QPushButton):
+        assert action.height() >= action.sizeHint().height()
+
+    window.dirty = False
+    window.close()
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_dropdown_shows_all_options_that_fit_on_screen(app, dark):
+    window = MainWindow()
+    window._set_theme(dark)
+    window.resize(640, 430)
+    window._select_workspace("transit")
+    window.show()
+    app.processEvents()
+    transit = window.transit_tab
+
+    for combo in (transit.workspace, transit.engineering.specific.methods):
+        assert combo.isVisible()
+        QTest.mouseClick(combo, Qt.MouseButton.LeftButton, pos=combo.rect().center())
+        app.processEvents()
+        view = combo.view()
+        assert view.isVisible()
+        assert view.verticalScrollBar().maximum() == 0
+        last = combo.model().index(combo.count() - 1, combo.modelColumn())
+        assert view.viewport().rect().contains(view.visualRect(last))
+        combo.hidePopup()
+        app.processEvents()
+    assert transit.workspace.itemText(1) == "Cálculo de línea vial"
+
+    window._set_theme(False)
     window.dirty = False
     window.close()
