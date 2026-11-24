@@ -1,0 +1,237 @@
+{
+  "schema": 1,
+  "systems": [
+    {
+      "id": "metro",
+      "name": "Metro · Ferrocarril pesado",
+      "technology": "rail",
+      "infrastructure": "Vía segregada",
+      "description": "Trenes en vía segregada, con andenes y control ferroviario.",
+      "vehicles": [
+        {
+          "id": "nm02",
+          "name": "NM-02",
+          "manufacturer": "Bombardier / CAF",
+          "body": "metro",
+          "source": "https://metro.cdmx.gob.mx/operacion/parque-vehicular/nm-02",
+          "note": "Longitud de ficha STC. Formación de referencia: nueve carros.",
+          "values": {
+            "length_m": 150.9,
+            "cars": 9
+          }
+        },
+        {
+          "id": "nm16",
+          "name": "NM-16",
+          "manufacturer": "CAF",
+          "body": "metro",
+          "source": "https://www.metro.cdmx.gob.mx/parque-vehicular/nm-16",
+          "note": "Longitud de ficha STC. Formación de referencia: nueve carros.",
+          "values": {
+            "length_m": 150.9,
+            "cars": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "lrt",
+      "name": "Tren Ligero · Ferrocarril ligero",
+      "technology": "rail",
+      "infrastructure": "Vía ligera",
+      "description": "El intervalo está condicionado por señalización, terminales y pasos a nivel.",
+      "vehicles": [
+        {
+          "id": "te06",
+          "name": "TE-06",
+          "manufacturer": "",
+          "body": "rail",
+          "source": "https://www.ste.cdmx.gob.mx/storage/app/media/uploaded-files/especificacion_tecnica.pdf",
+          "note": "Modelo incluido en la especificación técnica del STE.",
+          "values": {}
+        },
+        {
+          "id": "te12",
+          "name": "TE-12",
+          "manufacturer": "",
+          "body": "rail",
+          "source": "https://www.ste.cdmx.gob.mx/storage/app/media/uploaded-files/especificacion_tecnica.pdf",
+          "note": "Modelo incluido en la especificación técnica del STE.",
+          "values": {}
+        }
+      ]
+    },
+    {
+      "id": "brt",
+      "name": "Metrobús · BRT",
+      "technology": "road",
+      "infrastructure": "Carril confinado",
+      "description": "Autobuses de alta capacidad. Verifica andenes, rebase y longitud de bahía.",
+      "vehicles": [
+        {
+          "id": "volvo7300a",
+          "name": "Volvo 7300 articulado",
+          "manufacturer": "Volvo",
+          "body": "articulated",
+          "source": "https://www.volvobuses.com/mx/news-stories/press-releases/2015/mar/news-150593.html",
+          "note": "Capacidad de fabricante para la variante articulada en México.",
+          "values": {
+            "nominal": 160
+          }
+        },
+        {
+          "id": "volvo7300b",
+          "name": "Volvo 7300 biarticulado",
+          "manufacturer": "Volvo",
+          "body": "biarticulated",
+          "source": "https://www.volvobuses.com/mx/news-stories/press-releases/2015/mar/news-150593.html",
+          "note": "Capacidad de fabricante para la variante biarticulada en México.",
+          "values": {
+            "nominal": 240
+          }
+        }
+      ]
+    },
+    {
+      "id": "trolley",
+      "name": "Trolebús · Autobús eléctrico",
+      "technology": "road",
+      "infrastructure": "Catenaria",
+      "description": "Autobuses eléctricos con infraestructura de alimentación según el corredor.",
+      "vehicles": [
+        {
+          "id": "zk5120",
+          "name": "Yutong ZK5120C",
+          "manufacturer": "Yutong",
+          "body": "trolley",
+          "source": "https://www.ste.cdmx.gob.mx/dependencia/acerca-de/flota",
+          "note": "Modelo documentado por STE. Captura la capacidad de la unidad analizada.",
+          "values": {}
+        },
+        {
+          "id": "zk5180",
+          "name": "Yutong ZK5180C",
+          "manufacturer": "Yutong",
+          "body": "trolley_art",
+          "source": "https://www.ste.cdmx.gob.mx/dependencia/acerca-de/flota",
+          "note": "Modelo articulado documentado por STE. Captura la capacidad de la unidad.",
+          "values": {}
+        }
+      ]
+    },
+    {
+      "id": "cable",
+      "name": "Cablebús · Teleférico monocable",
+      "technology": "cable",
+      "infrastructure": "Teleférico",
+      "description": "Cabinas en circulación continua. Evalúa separación, circuito y embarque en estación.",
+      "vehicles": [
+        {
+          "id": "gd10d",
+          "name": "Cablebús L1 · 10-MGD",
+          "manufacturer": "Doppelmayr",
+          "body": "cable",
+          "source": "https://www.doppelmayr.com/es/proyectos-de-referencia/proyecto-de-referencia-10-mgd-cablebus-linea-1/",
+          "note": "Proyecto de referencia Línea 1. Capacidad sentada por cabina.",
+          "values": {
+            "nominal": 10,
+            "seats": 10
+          }
+        },
+        {
+          "id": "gd10l",
+          "name": "Cablebús L2 · GD10",
+          "manufacturer": "LEITNER",
+          "body": "cable",
+          "source": "https://www.leitner.com/en/company/references/detail/gd10-cablebus-l2a-l2b/",
+          "note": "Proyecto de referencia Línea 2. Capacidad por cabina.",
+          "values": {
+            "nominal": 10,
+            "seats": 10
+          }
+        }
+      ]
+    },
+    {
+      "id": "rtp",
+      "name": "RTP · Autobús urbano",
+      "technology": "road",
+      "infrastructure": "Calle",
+      "description": "Autobuses convencionales, generalmente en operación vial mixta.",
+      "vehicles": [
+        {
+          "id": "access",
+          "name": "Volvo Access B8RLE",
+          "manufacturer": "Volvo",
+          "body": "bus",
+          "source": "https://www.rtp.cdmx.gob.mx/storage/app/media/2020%20GPI/FIES/ACB_ADQ%2069%20AUTOBUSES_RTP_120419_VF_.pdf",
+          "note": "Variante documentada por RTP en su análisis costo-beneficio, tabla 36.",
+          "values": {}
+        },
+        {
+          "id": "rtpyutong",
+          "name": "Yutong entrada baja Euro VI · RTP/LPI/007/2022",
+          "manufacturer": "Yutong",
+          "body": "bus",
+          "source": "https://rtp.cdmx.gob.mx/storage/app/media/RM2022/2do%20Trimestre/Infolp.pdf",
+          "note": "El documento identifica al fabricante y la adquisición de RTP.",
+          "values": {}
+        }
+      ]
+    },
+    {
+      "id": "concesionado",
+      "name": "Autobús concesionado · Corredor urbano",
+      "technology": "road",
+      "infrastructure": "Calle",
+      "description": "Registra la configuración y condiciones del corredor concesionado.",
+      "vehicles": [
+        {
+          "id": "boxer",
+          "name": "Mercedes-Benz Boxer",
+          "manufacturer": "Mercedes-Benz",
+          "body": "midibus",
+          "source": "https://semovi.cdmx.gob.mx/storage/app/media/diagnostico-tecnico-de-movilidad-pim.pdf",
+          "note": "Inventario de corredores concesionados, ATROLSA y SAUSA.",
+          "values": {}
+        },
+        {
+          "id": "runner10",
+          "name": "DINA Runner 10",
+          "manufacturer": "DINA",
+          "body": "midibus",
+          "source": "https://semovi.cdmx.gob.mx/storage/app/media/diagnostico-tecnico-de-movilidad-pim.pdf",
+          "note": "Inventario SEMOVI, corredores COAVEO, COTANSAPI y otros.",
+          "values": {}
+        }
+      ]
+    },
+    {
+      "id": "combi",
+      "name": "Combi · Van de pasajeros",
+      "technology": "road",
+      "infrastructure": "Calle",
+      "description": "Vehículos de referencia comercial en México. Verifica habilitación y plazas autorizadas.",
+      "vehicles": [
+        {
+          "id": "urvan",
+          "name": "Nissan Urvan Pasajeros",
+          "manufacturer": "Nissan",
+          "body": "van",
+          "source": "https://www.nissan.com.mx/content/dam/Nissan/mexico/assets/urvan/my22/vlp/catalogos/nissan-2022-urvan_passenger-catalogo.pdf",
+          "note": "Ficha de gama mexicana. La configuración y el conteo de plazas deben capturarse.",
+          "values": {}
+        },
+        {
+          "id": "hiace",
+          "name": "Toyota Hiace 12 Pasajeros",
+          "manufacturer": "Toyota",
+          "body": "van",
+          "source": "https://www.toyota.mx/sites/default/files/descargables/Ficha_Tecnica_HIACE_24_web_0.pdf",
+          "note": "Nombre de variante comercial. Captura las plazas efectivas, excluyendo chofer.",
+          "values": {}
+        }
+      ]
+    }
+  ]
+}

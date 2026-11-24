@@ -298,3 +298,39 @@ def test_side_panel_layout_theme_and_context(app: QApplication) -> None:
 
     window.dirty = False
     window.close()
+
+
+def test_transport_engineering_modes_demos_and_reopen(app, tmp_path):
+    from hcnet.domain.transit_reporting import report
+    from hcnet.io.project import load_project, save_project
+
+    window = MainWindow()
+    window.resize(1010, 720)
+    window.workspace_choice.setCurrentIndex(window.workspace_choice.findData("transit"))
+    window.show()
+    module = window.transit_tab.engineering
+    assert module.line.line.value("length_km") == ""
+    assert not module.run_current()
+    form = module.specific.forms["Frecuencia"]
+    form.set_values({"h": 4})
+    window._calculate_active()
+    record = module.records["specific/0"]
+    assert record["metrics"]["Frecuencia (unid/h)"] == 15
+    form.set_values({"h": 6})
+    assert record["stale"]
+    assert module.export_tex.isHidden()
+    for case in range(7):
+        module.load_demonstration(case)
+        assert module.run_current(), module.status.text()
+        app.processEvents()
+        assert module.records
+    project = window._project_from_ui()
+    reopened = load_project(save_project(project, tmp_path / "transporte.hcnet"))
+    window._load_project_into_ui(reopened)
+    assert module.records.keys() == reopened.transit_engineering["records"].keys()
+    document = report(reopened, module.records["advanced/0"])
+    assert "letterpaper" in document and "inputenc" not in document
+    assert "\\begin{picture}" in document
+    assert window.workspaces.currentWidget() is window.transit_tab
+    window.dirty = False
+    window.close()

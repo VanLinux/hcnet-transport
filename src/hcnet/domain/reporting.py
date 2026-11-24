@@ -361,7 +361,7 @@ Software libre bajo GNU GPL v3.0}}
 def _module_latex(project: IntersectionProject, title: str, content: str) -> str:
     return rf"""\documentclass[11pt,letterpaper]{{article}}
 \usepackage[margin=2cm]{{geometry}}
-\usepackage{{booktabs,longtable,amsmath}}
+\usepackage{{booktabs,longtable,amsmath,pict2e,url}}
 \usepackage{{xcolor}}
 \setlength{{\parindent}}{{0pt}}
 \begin{{document}}
@@ -591,10 +591,13 @@ def _alternatives_latex(project: IntersectionProject, original: IntersectionResu
 
 
 def general_latex(project: IntersectionProject) -> str:
+    from hcnet.domain.transit_reporting import current_records, section
+
+    engineering = current_records(project.transit_engineering)
     modules = set(project.calculated_modules)
-    if not modules & {"intersection", "roundabout", "transit"}:
+    if not engineering and not modules & {"intersection", "roundabout", "transit"}:
         raise ValueError("Calcula un módulo antes de generar el informe general.")
-    sections = []
+    sections = [section(record) for record in engineering]
     if "transit" in modules:
         sections.append(_transit_latex(project))
     if "roundabout" in modules:

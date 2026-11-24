@@ -8,7 +8,7 @@ Manual* (HCM).
 
 [![Pruebas](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml/badge.svg)](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml)
 [![Licencia: GPL v3](https://img.shields.io/badge/Licencia-GPLv3-blue.svg)](LICENSE)
-[![Versión](https://img.shields.io/badge/versión-3.4.0-3f444b.svg)](CHANGELOG.md)
+[![Versión](https://img.shields.io/badge/versión-3.5.0-3f444b.svg)](CHANGELOG.md)
 
 ## Versión 3.3
 
@@ -80,13 +80,40 @@ Incluye un esquema y calcula radios de trayectoria por cuerda y flecha, radios
 de isla y anillo, velocidad teórica y distancia de parada. La geometría es de
 predimensionamiento. Véase [la metodología](docs/METHODOLOGY.md#14-rotondas).
 
-## Actualizar y ejecutar en Fedora
+## Transporte público en 3.5.0
 
-Desde la carpeta del repositorio, con Python 3.11 o superior:
+Abre **Transporte público** y selecciona un tipo de análisis.
+
+| Modalidad | Para qué sirve |
+|---|---|
+| **Cálculo específico** | Frecuencia, intervalo, capacidad, flota, viaje, permanencia, estaciones, espaciamiento, acceso, ocupación, espera o congestión con los datos de ese cálculo. |
+| **Análisis integral** | Configura servicio, vehículo, puertas, estaciones de ida y regreso y demanda. Usa **Análisis avanzado** para congestión, economía, optimización y SUMO vial. |
+| **Recomendación de sistema** | Compara alternativas con restricciones de capacidad e infraestructura y analiza la sensibilidad del orden a los pesos utilizados. |
+
+Las fichas distinguen parámetros documentados y datos que debe capturar el analista.
+Para probar el flujo completo, pulsa **Cargar caso demostrativo…** y elige RTP,
+Metrobús, Metro, Cablebús, Combi, selección tecnológica o calibración BPR.
+Los casos didácticos se cargan únicamente por solicitud. Guarda los datos,
+comparaciones y resultados en `.hcnet`. Los insumos externos de una corrida SUMO
+se conservan por referencia y huella SHA-256. Guarda sus archivos por separado si
+vas a repetir el experimento en otra computadora.
+
+El informe integral se exporta desde **Configuración y operación**, después de
+calcular la línea y los análisis avanzados aplicados. El selector superior permite
+reabrir el cálculo de línea vial de la versión 3.4 y consultar sus proyectos anteriores.
+
+[Metodología de transporte público](docs/METHODOLOGY.md#transporte-público-350) ·
+[Fuentes de las fichas](docs/TRANSIT_CATALOG.md)
+
+## Actualizar y ejecutar en Fedora o Ubuntu
+
+Desde la carpeta del repositorio, con Python 3.11 o superior. En una instalación nueva,
+usa `sudo dnf install git python3` en Fedora o `sudo apt install git python3 python3-venv`
+en Ubuntu.
 
 ```bash
 git switch main
-git pull --ff-only
+git pull --ff-only origin main
 python3 -m venv .venv  # Solo la primera vez
 .venv/bin/python -m pip install -e .
 .venv/bin/hcnet
@@ -205,31 +232,12 @@ conservar las corridas, las series y los estudios de emisiones.
   y factores de ralentí documentados. Para el cálculo de ralentí se requiere el
   tiempo medio en ralentí y la fuente de los factores.
 
-Actualización y arranque en Fedora o Ubuntu, desde el clon existente en `main`:
-
-```bash
-git pull --ff-only origin main
-.venv/bin/python -m pip install -e .
-.venv/bin/hcnet
-```
-
-Si es el primer uso, crea el entorno con `python3 -m venv .venv` antes de ejecutar
-la instalación editable. En Ubuntu puede ser necesario `sudo apt install python3-venv`.
-
-El motor analítico funciona por separado. Para habilitar la microsimulación, HCNet
-busca `sumo` y `netconvert` del mismo paquete mediante `SUMO_HOME`, el entorno
-Python o `PATH`. También puedes seleccionar el ejecutable `sumo` desde la
-interfaz. Se requiere SUMO 1.14 o posterior para utilizar las unidades actuales
-de combustible.
-
-- **Ubuntu:** `sudo apt update && sudo apt install sumo`. Comprueba la versión con
-  `sumo --version` y que `netconvert --version` responda.
-- **Fedora:** si tu repositorio no ofrece el paquete, instala el paquete oficial
-  opcional en el entorno de HCNet con `.venv/bin/python -m pip install eclipse-sumo`.
-  Comprueba `.venv/bin/sumo --version` y `.venv/bin/netconvert --version`.
-  También está disponible esta vía en Ubuntu. Si tu plataforma carece de rueda
-  compatible, usa los binarios de Linux del proyecto SUMO y selecciona `bin/sumo`
-  en la interfaz.
+Para los estudios de intersección y corredor se utiliza la misma instalación de SUMO.
+Si ya está disponible en Fedora o Ubuntu, comprueba `sumo --version` y
+`netconvert --version`. HCNet encuentra ambos vía `SUMO_HOME`, el entorno Python o
+`PATH`. Todos los cálculos analíticos también funcionan sin el motor.
+La microsimulación de corredores importa una configuración `.sumocfg` con red y
+rutas explícitas; consulta la metodología para conocer las opciones compatibles.
 
 [Instalación oficial de SUMO](https://sumo.dlr.de/docs/Installing/index.html) ·
 [Metodología y alcance de los estudios](docs/METHODOLOGY.md#estudios-opcionales-de-intersecciones)

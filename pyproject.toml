@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hcnet-transport"
-version = "3.4.0"
+version = "3.5.0"
 description = "Aplicación educativa para analizar capacidad y nivel de servicio en instalaciones de transporte."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -61,7 +61,7 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-hcnet = ["resources/*.svg"]
+hcnet = ["resources/*.svg", "resources/*.json"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

@@ -66,11 +66,13 @@ from hcnet.domain.transit import (
     TransitLineResult,
     calculate_transit_line,
 )
+from hcnet.domain.transit_reporting import current_records
 from hcnet.io.project import (
     export_general_tex,
     export_report_tex,
     export_results_csv,
     export_roundabout_tex,
+    export_transit_engineering_tex,
     export_transit_tex,
     load_project,
     save_project,
@@ -252,6 +254,8 @@ class MainWindow(QMainWindow):
         self.groups_tab = self._build_groups_tab()
         self.signals_tab = self._build_signals_tab()
         self.transit_tab = PublicTransportTab()
+        self.transit_tab.engineering.changed.connect(self._mark_document_dirty)
+        self.transit_tab.engineering.export_requested.connect(self._export_engineering)
         self.transit_tab.input_changed.connect(self._transit_changed)
         self.transit_tab.calculate_requested.connect(self.calculate_transit)
         self.transit_tab.export_requested.connect(self._export_transit)
@@ -1140,6 +1144,8 @@ class MainWindow(QMainWindow):
             yellow_time_s=self.yellow_spin.value(),
             all_red_time_s=self.all_red_spin.value(),
             public_transport=self.transit_tab.input_data(),
+            transit_engineering=self.transit_tab.engineering.snapshot()
+            | {"workspace": self.transit_tab.workspace.currentIndex()},
             workspace=(
                 self.workspace_choice.currentData() if self.workspace_choice.currentData() != "help"
                 else self.project.workspace
@@ -1172,6 +1178,11 @@ class MainWindow(QMainWindow):
         self.yellow_spin.setValue(project.yellow_time_s)
         self.all_red_spin.setValue(project.all_red_time_s)
         self.transit_tab.set_input(project.public_transport)
+        self.transit_tab.engineering.set_state(project.transit_engineering)
+        legacy = 1 if project.public_transport.name and not project.transit_engineering else 0
+        self.transit_tab.workspace.setCurrentIndex(
+            project.transit_engineering.get("workspace", legacy)
+        )
         self.roundabout_tab.set_input(project.roundabout)
         self.workspace_choice.setCurrentIndex(max(0, self.workspace_choice.findData(
             project.workspace
@@ -1505,7 +1516,10 @@ class MainWindow(QMainWindow):
 
     def _calculate_active(self) -> None:
         if self.workspaces.currentWidget() is self.transit_tab:
-            self.calculate_transit()
+            if self.transit_tab.workspace.currentIndex() == 0:
+                self.transit_tab.engineering.run_current()
+            else:
+                self.calculate_transit()
         elif self.workspaces.currentWidget() is self.roundabout_tab:
             self.calculate_roundabout()
         else:
@@ -1842,7 +1856,9 @@ class MainWindow(QMainWindow):
 
     def _export_general(self) -> None:
         self.project = self._project_from_ui()
-        if not self.project.calculated_modules:
+        if not self.project.calculated_modules and not current_records(
+            self.project.transit_engineering
+        ):
             QMessageBox.information(
                 self, "Informe pendiente", "Calcula al menos un módulo antes de exportar.",
             )
@@ -1858,6 +1874,13 @@ class MainWindow(QMainWindow):
             self._export_module_tex(
                 "transporte_publico", self.project.public_transport.name, export_transit_tex,
             )
+
+    def _export_engineering(self, record: dict) -> None:
+        self.project = self._project_from_ui()
+        self._export_module_tex(
+            "transporte_publico", self.project.name,
+            lambda project, path: export_transit_engineering_tex(project, record, path),
+        )
 
     def _export_roundabout(self) -> None:
         if self.calculate_roundabout():
@@ -1970,6 +1993,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # noqa: N802, ANN001
         if self._confirm_discard():
+            self.transit_tab.engineering.advanced.sumo.reset()
             event.accept()
         else:
             event.ignore()

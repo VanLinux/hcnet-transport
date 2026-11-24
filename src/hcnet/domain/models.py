@@ -12,7 +12,7 @@ from hcnet.domain.calibration import EmpiricalFactor, FieldCalibration
 from hcnet.domain.roundabout import RoundaboutInput
 from hcnet.domain.transit import TransitLineInput
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 AZIMUTHS = dict(zip(
     ("Norte", "Noreste", "Oriente", "Sureste", "Sur", "Suroeste", "Poniente", "Noroeste"),
     range(0, 360, 45), strict=True,
@@ -171,6 +171,7 @@ class IntersectionProject:
     yellow_time_s: float = 3.0
     all_red_time_s: float = 1.0
     public_transport: TransitLineInput = field(default_factory=TransitLineInput)
+    transit_engineering: dict[str, Any] = field(default_factory=dict)
     roundabout: RoundaboutInput = field(default_factory=RoundaboutInput)
     calculated_modules: tuple[str, ...] = ()
     signal_optimization: SignalOptimizationResult | None = None
@@ -274,7 +275,7 @@ class IntersectionProject:
                 "all_red_time_s",
             ),
         )
-        for key in ("study_settings", "studies"):
+        for key in ("study_settings", "studies", "transit_engineering"):
             if key in clean_project and not isinstance(clean_project[key], dict):
                 raise ValueError(f"{key}: se esperaba un objeto.")
         branches = _parse_branches(raw_branches)

@@ -11,6 +11,7 @@ from tempfile import NamedTemporaryFile
 from hcnet.domain.models import IntersectionProject, IntersectionResult
 from hcnet.domain.reporting import general_latex, latex_report, roundabout_latex, transit_latex
 from hcnet.domain.signals import prepare_project
+from hcnet.domain.transit_reporting import report as transit_engineering_report
 
 
 def load_project(path: str | Path) -> IntersectionProject:
@@ -142,6 +143,12 @@ def export_report_tex(
 
 def export_transit_tex(project: IntersectionProject, path: str | Path) -> Path:
     return _atomic_write_text(Path(path), transit_latex(project))
+
+
+def export_transit_engineering_tex(
+    project: IntersectionProject, record: dict, path: str | Path
+) -> Path:
+    return _atomic_write_text(Path(path), transit_engineering_report(project, record))
 
 
 def export_roundabout_tex(project: IntersectionProject, path: str | Path) -> Path:

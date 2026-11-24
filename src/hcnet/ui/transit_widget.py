@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
 from hcnet.domain.transit import TransitLineInput, TransitLineResult
 from hcnet.ui.charts import TransitCongestionChart
 from hcnet.ui.styles import COLORS
+from hcnet.ui.transit_engineering import TransitEngineering
 
 
 class _TransitMetric(QFrame):
@@ -95,6 +97,15 @@ class PublicTransportTab(QWidget):
     def _build_ui(self) -> None:
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
+        self.workspace = QComboBox()
+        self.workspace.setAccessibleName("Herramienta de transporte público")
+        self.workspace.addItems(("Herramientas de transporte público", "Cálculo de línea vial 3.4"))
+        outer_layout.addWidget(self.workspace)
+        self.pages = QStackedWidget()
+        outer_layout.addWidget(self.pages)
+        self.engineering = TransitEngineering()
+        self.pages.addWidget(self.engineering)
+        self.workspace.currentIndexChanged.connect(self.pages.setCurrentIndex)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         page = QWidget()
@@ -205,7 +216,7 @@ class PublicTransportTab(QWidget):
         layout.addWidget(note)
 
         scroll.setWidget(page)
-        outer_layout.addWidget(scroll)
+        self.pages.addWidget(scroll)
 
     def _build_service_box(self) -> QGroupBox:
         box = QGroupBox("Servicio, demanda y flota")

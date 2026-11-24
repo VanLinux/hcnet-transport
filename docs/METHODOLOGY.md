@@ -611,3 +611,125 @@ Referencias de SUMO sobre
 [viajes](https://sumo.dlr.de/docs/Simulation/Output/TripInfo.html),
 [emisiones](https://sumo.dlr.de/docs/Simulation/Output/EmissionOutput.html) y
 [clases HBEFA3](https://sumo.dlr.de/docs/Models/Emissions/HBEFA3-based.html).
+
+## Transporte público 3.5.0
+
+Las unidades de diseño por defecto son pasajeros por hora y sentido, minutos,
+kilómetros y vehículos o formaciones completas. Los corredores viales, los
+ferroviarios y el teleférico comparten indicadores de oferta, con restricciones y
+modelos de infraestructura propios. La capacidad física y la carga de diseño
+se manejan por separado.
+
+### Línea, flota y estaciones
+
+Para un intervalo \(h\) en minutos, la frecuencia programada es \(60/h\).
+Una capacidad física \(C\) y una ocupación de diseño \(\lambda\) producen
+\(C\lambda\) plazas de diseño por unidad y \(fC\lambda\) por hora y sentido.
+En el método por área se suman plazas sentadas y la parte entera del producto
+del área útil de pie por la densidad. El tiempo comercial liga marcha, detenciones
+interiores y pérdidas por maniobra. Las regulaciones terminales son por sentido
+y se agregan al ciclo. La flota operativa redondea hacia arriba el cociente del
+ciclo y el intervalo. La flota de reserva relaciona el porcentaje indicado y la
+disponibilidad, tomando la mayor de las dos asignaciones.
+
+Para una estación con \(n\) posiciones efectivas, permanencia \(t_p\) y
+despeje \(t_d\), la capacidad aproximada es \(3600n/(t_p+t_d)\). Usa el número
+efectivo de posiciones, que refleja bloqueos, interferencia o falta de rebase.
+También pueden limitar la frecuencia las bahías de regulación, el intervalo
+mínimo que admite la infraestructura y la capacidad de embarque en un cable.
+El límite de plataforma en el perfil se expresa en movimientos de pasajeros
+por hora y se contrasta con ascensos más descensos.
+
+En las tablas, los valores por hora se convierten a promedio por unidad
+dividiendo entre la frecuencia. La carga solicitada que sale de cada estación
+es la carga inicial más ascensos menos descensos. Se valida que haya pasajeros
+suficientes para bajar. El déficit incremental compara el ascenso solicitado
+con las plazas físicas libres después de bajar. Puede haber sobrecarga en el
+perfil de demanda resultante. Un modelo explícito de colas y reasignación de
+destinos sería necesario para predecir abordajes efectivos y arrastre entre
+salidas.
+
+En una línea de cable, la separación espacial dividida entre la velocidad del
+cable determina el intervalo. El ciclo usa la longitud completa de circulación
+y los tiempos adicionales de paso y retorno que se capturen. La frecuencia
+máxima considera separación mínima, tiempos y capacidad de embarque. La
+permanencia de una cabina se modela mediante tiempos de estación capturados.
+
+### Puertas, acceso y espera
+
+Por puerta y movimiento, la demanda se distribuye conforme a los pesos entre
+puertas habilitadas y se multiplica por segundos por pasajero, divididos por
+canales. El régimen secuencial suma el mayor tiempo de ascenso y el mayor
+tiempo de descenso. En operación simultánea por puertas distintas se usa el
+mayor de los dos. En puertas compartidas se usa el mayor tiempo agregado por
+puerta, con interferencia en las puertas con ambos flujos. Se agrega el máximo
+tiempo fijo y adicional de accesibilidad entre las puertas. Los valores iniciales
+del editor y los ejercicios son supuestos editables. Sustituye las tasas por
+observaciones que representen las condiciones de pago y acceso del corredor.
+
+El acceso longitudinal medio con separación uniforme \(s\) es \(s/(4v_p)\).
+Para espaciamiento de diseño se minimiza la suma de acceso y egreso longitudinal
+más demora por detenciones en un viaje medio de longitud \(L_m\). Con unidades
+coherentes, \(J(s)=s/(2v_p)+L_m\,t_p/s\). Ubicaciones demandadas, seguridad vial,
+transferencias y accesibilidad requieren un estudio de campo.
+
+Con llegadas aleatorias independientes y un conjunto de intervalos observados
+\(h_i\), la espera es \(\sum h_i^2/(2\sum h_i)\). Con servicio regular y
+llegadas aleatorias puede usarse \(h/2\). Para el CV de intervalos se utiliza
+la desviación estándar muestral dividida por la media observada.
+
+### Congestión, evaluación y optimización
+
+Para v/c igual a \(x\) la demora depende del modelo lineal, BPR, Davidson o
+exponencial. Davidson sólo tiene dominio operativo para \(0\le x<1\). El
+calibrador minimiza los residuos cuadrados en tiempo con capacidad vial fijada
+externamente y cotas en los parámetros libres. Puede fijarse tiempo en flujo
+libre, alfa o beta según la función. Lee CSV con columnas
+`flujo,tiempo,muestra`, tiempos en minutos, punto decimal y etiquetas
+`ajuste` o `validación`. La validación se mantiene fuera del ajuste.
+Se presentan RMSE, MAE, R², residuos y advertencias de convergencia y cotas.
+La comparabilidad requiere aforos, capacidad y tiempos del mismo tramo, sentido
+y periodo. La extrapolación fuera del intervalo observado requiere verificación.
+
+El modelo económico calcula unidades-km, ingresos a partir de ascensos de pago,
+costos fijos y por unidad-km, subsidio, recuperación de costos y valor presente
+con flujo anual uniforme. La recomendación filtra por demanda futura,
+infraestructura, presupuesto, pendiente, radio y ancho antes de ponderar
+capacidad, costo, velocidad y calidad. Las alternativas con evidencia insuficiente
+figuran como pendientes. Con puntuación ponderada se normaliza por rango; con
+TOPSIS se comparan distancias a los perfiles ideal y antiideal. La sensibilidad
+varía un peso a la vez en ±20 %. Mantén escalas y monedas comunes.
+
+Se explora una malla de intervalos para la configuración original y la
+alternativa que capture el usuario. Los perfiles por unidad se convierten a
+flujos horarios al intervalo de referencia antes de variar la frecuencia.
+Se filtran proyectos que excedan la separación, capacidad, flota o presupuesto.
+La búsqueda ofrece objetivos individuales y un conjunto no dominado en espera,
+flota y costo dentro de la malla muestreada. La espera de los candidatos se
+compara bajo el supuesto regular. Los cambios de trazado, número de puertas o
+compatibilidad con el derecho de vía requieren capturar una alternativa factible.
+
+### SUMO de corredor vial
+
+Para Metrobús, Trolebús, RTP, concesionado y Combi puede ejecutarse una
+configuración existente con red, rutas y, cuando aplica, paradas y señalización.
+La copia de ejecución utiliza los archivos declarados y las opciones de
+tiempo, paso, teletransporte y dispersión de velocidad compatibles. Omite otras
+opciones y archivos de salida del proyecto original. Los detectores y archivos
+adicionales con referencias externas deben retirarse de la configuración de
+trabajo. Registra la semilla, versión y huella de los archivos. La ejecución
+ocurre en segundo plano mediante el mismo SUMO que usa intersecciones.
+
+El prefijo identifica vehículos de un mismo servicio o sentido. Con una parada
+común se estiman intervalos entre las salidas de esos vehículos; las salidas
+simultáneas se contabilizan por separado. Los viajes se resumen con los
+vehículos que completan su itinerario. La detención y los intercambios provienen
+de la salida de paradas de SUMO. Los ascensos requieren viajeros explícitos
+en el escenario. Las colas son medidas viales del carril solicitado, expresadas
+en metros.
+
+- [TCRP Report 165, Transit Capacity and Quality of Service Manual, 3.ª ed.](https://trid.trb.org/View/1260509)
+- [ITDP, BRT Planning Guide](https://brtguide.itdp.org/)
+- [SUMO TripInfo](https://sumo.dlr.de/docs/Simulation/Output/TripInfo.html)
+- [SUMO StopOutput](https://sumo.dlr.de/docs/Simulation/Output/StopOutput.html)
+- [SUMO QueueOutput](https://sumo.dlr.de/docs/Simulation/Output/QueueOutput.html)

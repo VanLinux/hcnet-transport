@@ -2,6 +2,15 @@
 
 Todos los cambios relevantes de HCNet Transport se documentan en este archivo.
 
+## 3.5.0
+
+- Transporte público con cálculo específico, análisis integral y recomendación preliminar de tecnología.
+- Ocho sistemas y 16 fichas vehiculares con fuentes. Fichas de usuario reutilizables y editor gráfico de puertas por carro.
+- Dimensionamiento de frecuencia, oferta y flota. Perfiles de carga por sentido, estaciones, esquema propio para telecabinas, espera y evaluación económica.
+- Congestión lineal, BPR, Davidson y exponencial, con calibración y validación por CSV. Comparación de configuraciones y optimización con restricciones.
+- Microsimulación de corredores viales con la instalación compartida de SUMO. Resultados de viajes, paradas, intervalos y colas por carril seleccionado.
+- Siete casos demostrativos de carga explícita. Esquema 7 de `.hcnet`, lectura de proyectos anteriores, reportes carta en LaTeX y exportación CSV.
+
 ## 3.4.0
 
 - Microsimulación opcional de intersecciones semaforizadas con SUMO en segundo plano.
