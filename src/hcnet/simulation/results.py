@@ -82,7 +82,18 @@ def cancellable_rows(path: Path, tag: str):
         rows.close()
 
 
-def parse_run(directory: Path, network, options, planned: int, seed: int, check) -> dict:  # noqa: ANN001
+def parse_run(
+    directory: Path,
+    network,
+    options,
+    planned: int,
+    seed: int,
+    check,
+    *,
+    signals=True,
+    hydrocarbons=False,
+) -> dict:
+    pollutants = POLLUTANTS | {"HC": "g"} if hydrocarbons else POLLUTANTS
     fields = defaultdict(list)
     measurement_start, end = options.warmup, options.warmup + options.duration
     departed = arrived = cohort = completed = stopped_trips = 0
@@ -123,8 +134,8 @@ def parse_run(directory: Path, network, options, planned: int, seed: int, check)
     if len(frames) != options.duration:
         raise ValueError("SUMO no devolvió la serie completa de colas para el periodo medido.")
 
-    emissions = [[0.0] * len(POLLUTANTS) for _ in range(options.duration)]
-    by_type = defaultdict(lambda: [0.0] * len(POLLUTANTS))
+    emissions = [[0.0] * len(pollutants) for _ in range(options.duration)]
+    by_type = defaultdict(lambda: [0.0] * len(pollutants))
     stopped = [[0] * len(indexed) for _ in range(options.duration)]
     in_queue = [[0] * len(indexed) for _ in range(options.duration)]
     frames.clear()
@@ -140,7 +151,7 @@ def parse_run(directory: Path, network, options, planned: int, seed: int, check)
                 amounts = [
                     float(a[key])
                     / (1_000_000 if key == "CO2" else 1 if key == "electricity" else 1000)
-                    for key in POLLUTANTS
+                    for key in pollutants
                 ]  # Paso de integración de 1 s.
                 for i, amount in enumerate(amounts):
                     emissions[index][i] += amount
@@ -156,20 +167,24 @@ def parse_run(directory: Path, network, options, planned: int, seed: int, check)
         raise ValueError("SUMO no devolvió la serie completa de emisiones para el periodo medido.")
 
     signal = [None] * options.duration
-    phase_numbers = [
-        phase.phase_number
-        for phase in network.program.phases
-        for seconds in (phase.green_s, phase.yellow_s, phase.all_red_s)
-        if seconds > 0
-    ]
-    with cancellable_rows(directory / "signals.xml.gz", "tlsState") as samples:
-        for sample in samples:
-            check()
-            index = round(float(sample.attrib["time"])) - measurement_start
-            if 0 <= index < options.duration:
-                signal[index] = [phase_numbers[int(sample.attrib["phase"])], sample.attrib["state"]]
-    if any(item is None for item in signal):
-        raise ValueError("SUMO no devolvió los estados del semáforo para el periodo medido.")
+    if signals:
+        phase_numbers = [
+            phase.phase_number
+            for phase in network.program.phases
+            for seconds in (phase.green_s, phase.yellow_s, phase.all_red_s)
+            if seconds > 0
+        ]
+        with cancellable_rows(directory / "signals.xml.gz", "tlsState") as samples:
+            for sample in samples:
+                check()
+                index = round(float(sample.attrib["time"])) - measurement_start
+                if 0 <= index < options.duration:
+                    signal[index] = [
+                        phase_numbers[int(sample.attrib["phase"])],
+                        sample.attrib["state"],
+                    ]
+        if any(item is None for item in signal):
+            raise ValueError("SUMO no devolvió los estados del semáforo para el periodo medido.")
 
     lane_stats = {
         lane: queue_stats([row[index] for row in queue]) for lane, index in indexed.items()
@@ -208,7 +223,7 @@ def parse_run(directory: Path, network, options, planned: int, seed: int, check)
         "queue_series": pack(queue),
         "stopped_series": pack(stopped),
         "in_queue_series": pack(in_queue),
-        "emissions": dict(zip(POLLUTANTS, map(sum, zip(*emissions, strict=True)), strict=True)),
-        "by_type": {k: dict(zip(POLLUTANTS, v, strict=True)) for k, v in by_type.items()},
+        "emissions": dict(zip(pollutants, map(sum, zip(*emissions, strict=True)), strict=True)),
+        "by_type": {k: dict(zip(pollutants, v, strict=True)) for k, v in by_type.items()},
         "emission_series": pack([[round(value, 10) for value in row] for row in emissions]),
     }

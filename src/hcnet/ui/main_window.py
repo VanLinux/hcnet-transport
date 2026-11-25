@@ -72,6 +72,7 @@ from hcnet.io.project import (
     export_general_tex,
     export_report_tex,
     export_results_csv,
+    export_roundabout_engineering_tex,
     export_roundabout_tex,
     export_transit_engineering_tex,
     export_transit_tex,
@@ -80,6 +81,7 @@ from hcnet.io.project import (
 )
 from hcnet.ui.charts import IntersectionSketch, SaturationChart, SignalTimingDiagram
 from hcnet.ui.dialogs import LaneGroupDialog, SignalHeadDialog
+from hcnet.ui.roundabout_engineering import RoundaboutEngineering
 from hcnet.ui.roundabout_tab import RoundaboutTab
 from hcnet.ui.signal_workspace import OptimizationDialog, PhaseEditor, ScenarioPanel
 from hcnet.ui.studies import IntersectionStudies
@@ -276,6 +278,15 @@ class MainWindow(QMainWindow):
         self.roundabout_tab.input_changed.connect(self._roundabout_changed)
         self.roundabout_tab.calculate_requested.connect(self.calculate_roundabout)
         self.roundabout_tab.export_requested.connect(self._export_roundabout)
+        self.roundabout_engineering = RoundaboutEngineering(
+            self._project_from_ui, self.roundabout_tab.input_data,
+        )
+        self.roundabout_engineering.changed.connect(self._mark_document_dirty)
+        self.roundabout_engineering.export_requested.connect(self._export_roundabout_engineering)
+        self.roundabout_workspace = QTabWidget()
+        self.roundabout_workspace.setDocumentMode(True)
+        self.roundabout_workspace.addTab(self.roundabout_engineering, "Ingeniería de rotondas")
+        self.roundabout_workspace.addTab(self.roundabout_tab, "Cálculo clásico")
         self.results_tab = self._build_results_tab()
         self.trace_tab = self._build_trace_tab()
         self.compact_view = QComboBox()
@@ -317,7 +328,7 @@ class MainWindow(QMainWindow):
         signal_layout.addWidget(self.detail_tabs, 1)
         self.workspaces = QStackedWidget()
         for widget in (
-            self.scope_tab, self.signal_workspace, self.roundabout_tab, self.transit_tab,
+            self.scope_tab, self.signal_workspace, self.roundabout_workspace, self.transit_tab,
         ):
             self.workspaces.addWidget(widget)
         root.addWidget(self.workspaces, 1)
@@ -1092,8 +1103,9 @@ class MainWindow(QMainWindow):
             tiempo de viaje y comparación de programas semafóricos. Incluye además planeación
             de una línea de transporte público: velocidades, ciclo, flota, frecuencia,
             capacidad, paradas, acceso, intercambio de pasajeros y comparación de
-            funciones volumen–demora. El módulo de rotondas de un carril estima capacidad,
-            colas, demora y LOS, y permite predimensionar la geometría.</div>
+            funciones volumen–demora. Ingeniería de rotondas permite evaluar accesos de uno o
+            dos carriles, diseñar y comparar propuestas de conversión. El modo avanzado añade
+            calibración, comprobaciones geométricas y microsimulación vehicular opcional.</div>
 
             <h3>Flujo de trabajo</h3>
             <ol>
@@ -1153,6 +1165,8 @@ class MainWindow(QMainWindow):
             yellow_time_s=self.yellow_spin.value(),
             all_red_time_s=self.all_red_spin.value(),
             public_transport=self.transit_tab.input_data(),
+            roundabout_engineering=self.roundabout_engineering.snapshot()
+            | {"workspace": self.roundabout_workspace.currentIndex()},
             transit_engineering=self.transit_tab.engineering.snapshot()
             | {"workspace": self.transit_tab.workspace.currentIndex()},
             workspace=(
@@ -1194,6 +1208,11 @@ class MainWindow(QMainWindow):
             project.transit_engineering.get("workspace", legacy)
         )
         self.roundabout_tab.set_input(project.roundabout)
+        self.roundabout_engineering.set_state(project.roundabout_engineering)
+        legacy_roundabout = 1 if project.roundabout.diameter_m else 0
+        self.roundabout_workspace.setCurrentIndex(
+            project.roundabout_engineering.get("workspace", legacy_roundabout)
+        )
         self._select_workspace(project.workspace)
         self._refresh_input_table()
         self._refresh_signal_table()
@@ -1528,8 +1547,11 @@ class MainWindow(QMainWindow):
                 self.transit_tab.engineering.run_current()
             else:
                 self.calculate_transit()
-        elif self.workspaces.currentWidget() is self.roundabout_tab:
-            self.calculate_roundabout()
+        elif self.workspaces.currentWidget() is self.roundabout_workspace:
+            if self.roundabout_workspace.currentIndex() == 0:
+                self.roundabout_engineering.run_current()
+            else:
+                self.calculate_roundabout()
         else:
             self.calculate()
 
@@ -1606,7 +1628,10 @@ class MainWindow(QMainWindow):
         self.project.roundabout = data
         self.roundabout_tab.set_result(data, result)
         self._record_calculation("roundabout")
-        if show_errors and self.workspaces.currentWidget() is self.roundabout_tab:
+        if (
+            show_errors and self.workspaces.currentWidget() is self.roundabout_workspace
+            and self.roundabout_workspace.currentWidget() is self.roundabout_tab
+        ):
             self.roundabout_tab.ensureWidgetVisible(self.roundabout_tab.summary, 0, 80)
         self.statusBar().showMessage("Rotonda calculada", 5000)
         return True
@@ -1864,8 +1889,10 @@ class MainWindow(QMainWindow):
 
     def _export_general(self) -> None:
         self.project = self._project_from_ui()
-        if not self.project.calculated_modules and not current_records(
-            self.project.transit_engineering
+        if (
+            not self.project.calculated_modules
+            and not current_records(self.project.transit_engineering)
+            and not current_records(self.project.roundabout_engineering)
         ):
             QMessageBox.information(
                 self, "Informe pendiente", "Calcula al menos un módulo antes de exportar.",
@@ -1888,6 +1915,13 @@ class MainWindow(QMainWindow):
         self._export_module_tex(
             "transporte_publico", self.project.name,
             lambda project, path: export_transit_engineering_tex(project, record, path),
+        )
+
+    def _export_roundabout_engineering(self, record: dict) -> None:
+        self.project = self._project_from_ui()
+        self._export_module_tex(
+            "rotonda", self.project.name,
+            lambda project, path: export_roundabout_engineering_tex(project, record, path),
         )
 
     def _export_roundabout(self) -> None:
@@ -2002,6 +2036,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # noqa: N802, ANN001
         if self._confirm_discard():
             self.transit_tab.engineering.advanced.sumo.reset()
+            self.roundabout_engineering.simulation.reset()
+            self.roundabout_engineering.replay._stop()
             event.accept()
         else:
             event.ignore()

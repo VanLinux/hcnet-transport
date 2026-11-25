@@ -54,6 +54,7 @@ def baseline_snapshot(project: IntersectionProject) -> dict:
         "public_transport",
         "transit_engineering",
         "roundabout",
+        "roundabout_engineering",
         "calculated_modules",
         "signal_optimization",
         "last_evaluated",

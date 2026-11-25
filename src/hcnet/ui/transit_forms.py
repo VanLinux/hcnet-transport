@@ -295,6 +295,7 @@ class ResultPanel(QWidget):
         while self.tables.count():
             widget = self.tables.takeAt(0).widget()
             if widget:
+                widget.hide()
                 widget.deleteLater()
         self.metrics.setVisible(bool(record and record.get("metrics")))
         if not record:

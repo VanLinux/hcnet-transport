@@ -733,3 +733,11 @@ en metros.
 - [SUMO TripInfo](https://sumo.dlr.de/docs/Simulation/Output/TripInfo.html)
 - [SUMO StopOutput](https://sumo.dlr.de/docs/Simulation/Output/StopOutput.html)
 - [SUMO QueueOutput](https://sumo.dlr.de/docs/Simulation/Output/QueueOutput.html)
+
+
+## Ingeniería de rotondas 3.6.0
+
+Consulta [Ingeniería de rotondas](ROUNDABOUT_ENGINEERING.md) para la trazabilidad
+por carril, los coeficientes, dominios, métricas, diseño, calibración,
+conversión y protocolo de microsimulación. El cálculo de un carril descrito
+en la sección 14 permanece disponible como Cálculo clásico.

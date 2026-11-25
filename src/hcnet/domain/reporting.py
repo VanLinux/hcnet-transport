@@ -591,13 +591,18 @@ def _alternatives_latex(project: IntersectionProject, original: IntersectionResu
 
 
 def general_latex(project: IntersectionProject) -> str:
+    from hcnet.domain.roundabout_reporting import sections as roundabout_sections
     from hcnet.domain.transit_reporting import current_records, section
 
     engineering = current_records(project.transit_engineering)
     modules = set(project.calculated_modules)
-    if not engineering and not modules & {"intersection", "roundabout", "transit"}:
+    new_roundabouts = current_records(project.roundabout_engineering)
+    if not engineering and not new_roundabouts and not modules.intersection(
+        {"intersection", "roundabout", "transit"}
+    ):
         raise ValueError("Calcula un módulo antes de generar el informe general.")
     sections = [section(record) for record in engineering]
+    sections.extend(roundabout_sections(record) for record in new_roundabouts)
     if "transit" in modules:
         sections.append(_transit_latex(project))
     if "roundabout" in modules:

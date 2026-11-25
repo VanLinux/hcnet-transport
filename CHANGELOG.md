@@ -2,6 +2,14 @@
 
 Todos los cambios relevantes de HCNet Transport se documentan en este archivo.
 
+## 3.6.0
+
+- Constructor interactivo de rotondas con hasta ocho ramales, carriles independientes, edición de azimut y una sola demanda OD.
+- Capacidad convencional HCM de uno y dos carriles, brechas, regresión y Kimber. Demora de control, LOS, acumulación, P95, ajuste y validación de capacidades.
+- Diseño preliminar con dimensiones fijas, cribado de geometría, comparación de intervenciones y conversión desde intersecciones HCNet.
+- Experimentos vehiculares SUMO por semillas y demanda común, colas reproducibles y emisiones. Exportación de insumos, resultados, SVG y reportes LaTeX.
+- Nueve ejercicios explícitos y persistencia en esquema 8 con carga de proyectos anteriores.
+
 ## 3.5.0
 
 - Navegación directa entre áreas de trabajo en la barra superior.

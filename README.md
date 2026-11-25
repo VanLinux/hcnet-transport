@@ -8,7 +8,7 @@ Manual* (HCM).
 
 [![Pruebas](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml/badge.svg)](https://github.com/VanLinux/hcnet-transport/actions/workflows/tests.yml)
 [![Licencia: GPL v3](https://img.shields.io/badge/Licencia-GPLv3-blue.svg)](LICENSE)
-[![Versión](https://img.shields.io/badge/versión-3.5.0-3f444b.svg)](CHANGELOG.md)
+[![Versión](https://img.shields.io/badge/versión-3.6.0-3f444b.svg)](CHANGELOG.md)
 
 ## Versión 3.3
 
@@ -67,18 +67,41 @@ La lógica toma como referencia conceptual la separación entre demanda, oferta
 operativa e infraestructura utilizada por modelos integrados como TRANUS. El módulo
 evalúa una línea por vez.
 
-El selector superior cambia entre los módulos. Los divisores ajustables redistribuyen
+La barra superior cambia entre los módulos. Los divisores ajustables redistribuyen
 el espacio entre captura, esquema, resumen y resultados. El menú **Ver** cambia el tema.
 `↔` indica pestañas vinculadas y `◇` indica módulos independientes con reporte propio.
 
-### Rotondas
+### Ingeniería de rotondas en 3.6.0
 
-El módulo independiente analiza rotondas de un carril con dos a ocho ramales,
-azimuts y sentido de circulación editables. A partir de aforos origen–destino
-estima flujos conflictivos, capacidad, demora, relación v/c, LOS y cola P95.
-Incluye un esquema y calcula radios de trayectoria por cuerda y flecha, radios
-de isla y anillo, velocidad teórica y distancia de parada. La geometría es de
-predimensionamiento. Véase [la metodología](docs/METHODOLOGY.md#14-rotondas).
+Abre **Rotonda → Ingeniería de rotondas**. Selecciona **Evaluar**, **Diseñar**,
+**Optimizar** o **Convertir intersección**. El constructor admite entre dos y
+ocho ramales. Arrastra cada acceso para girarlo. Selecciona dos ramales con
+**Vincular origen y destino** para habilitar o restringir un movimiento.
+La matriz y la tabla de composición representan el mismo aforo.
+
+- **Normal**. Capacidad HCM por carril para configuraciones convencionales de uno
+  y dos carriles, aceptación de brechas, modelo lineal, demora, LOS, P95,
+  predimensionamiento y comparación analítica de conversiones.
+- **Avanzado**. Kimber para accesos de un carril dentro de su dominio, calibración
+  con datos de saturación o pares de brecha, factores documentados, comprobaciones
+  de trayectoria, seguridad geométrica preliminar y simulación opcional con SUMO.
+
+En **Modelo y dimensiones** registra valores medidos o fija los que se deben
+conservar. **Diseñar** completa la relación entre diámetro, isla y ancho anular.
+En **Original y alternativas** puedes importar la intersección semaforizada de
+este proyecto u otro `.hcnet`. La comparación conserva aforos OD, composición y
+FHMD, y descarta las variantes que exceden restricciones registradas.
+**Caso demostrativo…** ofrece nueve ejercicios hipotéticos de carga explícita.
+
+En **SUMO**, captura dimensiones, longitud y velocidad de los ramales.
+Puedes simular una rotonda convencional o cotejarla con el cruce original bajo
+las mismas llegadas y semillas. HCNet reutiliza el motor instalado. **Colas de
+SUMO** reproduce la longitud medida por carril. Los reportes Carta en LaTeX y
+los resultados CSV se exportan desde **Resultados**. Guarda estudios completos
+en `.hcnet`. Los archivos de la versión anterior se abren también en
+**Cálculo clásico** y pueden copiarse a la nueva captura.
+
+[Modelos, fuentes y límites](docs/ROUNDABOUT_ENGINEERING.md)
 
 ## Transporte público en 3.5.0
 

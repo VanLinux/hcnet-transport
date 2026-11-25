@@ -355,7 +355,7 @@ def test_navigation_and_transit_panels_use_available_width(app):
         app.processEvents()
 
     for key, page in (
-        ("signal", window.signal_workspace), ("roundabout", window.roundabout_tab),
+        ("signal", window.signal_workspace), ("roundabout", window.roundabout_workspace),
         ("help", window.scope_tab), ("transit", window.transit_tab),
     ):
         index = next(i for i in range(nav.count()) if nav.tabData(i) == key)
@@ -432,4 +432,47 @@ def test_dropdown_shows_all_options_that_fit_on_screen(app, dark):
 
     window._set_theme(False)
     window.dirty = False
+    window.close()
+
+
+def test_roundabout_constructor_modes_and_persistence(app, tmp_path):
+    from PySide6.QtWidgets import QTableWidgetItem
+
+    from hcnet.domain.roundabout_reporting import report
+    from hcnet.io.project import load_project, save_project
+
+    window=MainWindow()
+    window.resize(1100,720)
+    window._select_workspace("roundabout")
+    window.show()
+    module=window.roundabout_engineering
+    app.processEvents()
+    assert module.demand.values()==[]
+    assert not module.tabs.isTabVisible(module.sim_tab)
+
+    module.demand.matrix.setItem(0,1,QTableWidgetItem("160"))
+    assert module.demand.parsed()[0].volume==160
+    module.geometry.select("A")
+    module.geometry.canvas.moved.emit("A",15)
+    assert module.geometry.arms()[0].azimuth==15
+    assert module.demand.parsed()[0].volume==160
+    module.geometry._bump("outbound",1)
+    assert module.geometry.arms()[0].outbound==2
+    module.geometry.canvas.connected.emit("B","C")
+    assert any(m.origin=="B" and m.destination=="C" for m in module.demand.parsed())
+    assert module.run_current()
+    assert "operation" in module.records
+
+    for index in (0,1,2,3,4,5,6,8):
+        module.load_case(index)
+        assert module.run_current(), module.status.text()
+        assert "letterpaper" in report(window.project, module.records[module.report_key])
+    project=window._project_from_ui()
+    restored=load_project(save_project(project,tmp_path/"round.hcnet"))
+    window._load_project_into_ui(restored)
+    assert module.mode.currentIndex()==module.CONVERT
+    assert module.records["comparison"]["metrics"]["Alternativa preliminar"] is None
+    assert window.workspaces.currentWidget() is window.roundabout_workspace
+    assert "3.6.0" in window.windowTitle()
+    window.dirty=False
     window.close()
