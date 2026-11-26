@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
-from PySide6.QtCore import QDate, QSettings, Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QIcon
+from PySide6.QtCore import QDate, QSettings, Qt, QTimer, QUrl
+from PySide6.QtGui import QAction, QActionGroup, QColor, QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -85,8 +85,13 @@ from hcnet.ui.roundabout_engineering import RoundaboutEngineering
 from hcnet.ui.roundabout_tab import RoundaboutTab
 from hcnet.ui.signal_workspace import OptimizationDialog, PhaseEditor, ScenarioPanel
 from hcnet.ui.studies import IntersectionStudies
-from hcnet.ui.styles import COLORS, LOS_COLORS, dark_active, set_theme, themed_text
+from hcnet.ui.styles import COLORS, LOS_COLORS, dark_active, set_theme, set_ui_font, themed_text
 from hcnet.ui.transit_widget import PublicTransportTab
+
+MANUAL_URL = (
+    "https://vanlinux.github.io/movilidad-urbana/software/manuales/HCNet_Transport_Manual_Usuario.pdf"
+)
+OVERLEAF_URL = "https://www.overleaf.com/project"
 
 
 class MetricCard(QFrame):
@@ -129,6 +134,7 @@ class MainWindow(QMainWindow):
     QT_MAX_WIDGET_HEIGHT = (1 << 24) - 1
 
     def __init__(self) -> None:
+        set_ui_font()
         super().__init__()
         self.project = self._blank_project()
         self.current_path: Path | None = None
@@ -207,7 +213,7 @@ class MainWindow(QMainWindow):
         self.quit_action.setShortcut("Ctrl+Q")
         self.quit_action.triggered.connect(self.close)
 
-        self.about_action = QAction("Acerca de HCNet", self)
+        self.about_action = QAction("Acerca de", self)
         self.about_action.triggered.connect(self.show_about)
 
     def _create_menu_and_toolbar(self) -> None:
@@ -226,12 +232,21 @@ class MainWindow(QMainWindow):
         project_menu.addAction(self.calculate_action)
 
         view_menu = self.menuBar().addMenu("Vista")
+        self.theme_actions = QActionGroup(self)
+        self.light_action = view_menu.addAction("Modo claro")
         self.dark_action = view_menu.addAction("Modo oscuro")
-        self.dark_action.setCheckable(True)
-        self.dark_action.toggled.connect(self._set_theme)
+        for action in (self.light_action, self.dark_action):
+            action.setCheckable(True)
+            self.theme_actions.addAction(action)
+        self.light_action.triggered.connect(lambda: self._set_theme(False))
+        self.dark_action.triggered.connect(lambda: self._set_theme(True))
 
         help_menu = self.menuBar().addMenu("Ayuda")
         help_menu.addAction(self.about_action)
+        help_menu.addAction("Manual", lambda: QDesktopServices.openUrl(QUrl(MANUAL_URL)))
+        help_menu.addAction(
+            "Link Overleaf", lambda: QDesktopServices.openUrl(QUrl(OVERLEAF_URL)),
+        )
 
         toolbar = QToolBar("Áreas de trabajo")
         toolbar.setObjectName("workspaceToolbar")
@@ -452,9 +467,8 @@ class MainWindow(QMainWindow):
             self._mark_document_dirty()
 
     def _set_theme(self, dark: bool) -> None:
-        self.dark_action.blockSignals(True)
-        self.dark_action.setChecked(dark)
-        self.dark_action.blockSignals(False)
+        action = self.dark_action if dark else self.light_action
+        action.setChecked(True)
         set_theme(dark)
         self.scope_browser.setHtml(themed_text(self.scope_html))
         self.refresh_trace()
@@ -945,6 +959,7 @@ class MainWindow(QMainWindow):
         calculate_button.setObjectName("primaryButton")
         calculate_button.clicked.connect(self.calculate)
         study_button = QPushButton("Microsimulación, colas y emisiones…")
+        study_button.setObjectName("simulationButton")
         study_button.clicked.connect(self._open_studies)
         top.addWidget(calculate_button)
         layout.addLayout(top)
@@ -1066,7 +1081,7 @@ class MainWindow(QMainWindow):
         self.scope_browser = browser
         self.scope_html = f"""
             <style>
-              body {{ font-family: sans-serif; color: #202124; margin: 22px; }}
+              body {{ color: #202124; margin: 22px; }}
               h1 {{ color: #202124; font-size: 26px; margin-bottom: 2px; }}
               h2, h3 {{ color: #30343b; }}
               .lead {{ color: #5f6368; font-size: 14px; margin-bottom: 18px; }}

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import re
+from importlib.resources import files
+from pathlib import Path
 
-from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPalette
+from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 
 COLORS = {
     "navy": "#20242A",
@@ -39,7 +41,6 @@ QMainWindow, QDialog {
 }
 QWidget {
     color: #202124;
-    font-family: "Inter", "Noto Sans", "DejaVu Sans", sans-serif;
     font-size: 10pt;
 }
 QToolBar {
@@ -199,6 +200,22 @@ QPushButton#primaryButton {
 QPushButton#primaryButton:hover {
     background: #17191C;
 }
+QPushButton#simulationButton:enabled {
+    background: #624286;
+    color: #fffafc;
+    border-color: #624286;
+}
+QPushButton#simulationButton:hover:enabled {
+    background: #502f74;
+}
+QPushButton#simulationButton:pressed:enabled {
+    background: #40245d;
+}
+QPushButton#simulationButton:disabled {
+    background: #efebf3;
+    color: #6e6079;
+    border-color: #c7bacf;
+}
 QPushButton#dangerButton {
     color: #B42318;
 }
@@ -304,7 +321,34 @@ DARK_COLORS = {
     "#f7f7f7": "#252e3a", "#f1f3f4": "#252e3a", "#9aa0a6": "#aab9cb",
     "#657987": "#aab9cb", "#176b45": "#7ce3b4", "#eceef0": "#2d3746",
     "#fff3d6": "#3b2b1b", "#603b10": "#ffdfa3", "#9a5b13": "#e1a04d",
+    "#624286": "#bfa2ef", "#fffafc": "#221733", "#502f74": "#d3bcfa",
+    "#40245d": "#ac8cde", "#efebf3": "#352c45", "#6e6079": "#c0b2ce",
+    "#c7bacf": "#635571",
 }
+
+
+def set_ui_font() -> None:
+    app = QApplication.instance()
+    if app.property("hcnetUiFont"):
+        return
+    for font in files("hcnet").joinpath("resources", "fonts").iterdir():
+        if font.name.endswith(".otf"):
+            QFontDatabase.addApplicationFontFromData(font.read_bytes())
+    app.setFont(QFont("CMU Serif", 10))
+    app.setProperty("hcnetUiFont", True)
+
+
+def simulation_icon() -> QIcon:
+    return QIcon(str(Path(__file__).parents[1] / "resources" / "simulation.svg"))
+
+
+def set_calculate_button(button: QPushButton, simulation: bool) -> None:
+    name = "simulationButton" if simulation else "primaryButton"
+    if button.objectName() != name:
+        button.setObjectName(name)
+        button.setText("Ejecutar microsimulación" if simulation else "Calcular")
+        button.style().unpolish(button)
+        button.style().polish(button)
 
 
 def dark_active() -> bool:

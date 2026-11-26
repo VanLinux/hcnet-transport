@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from hcnet.domain.transit_examples import DEMONSTRATIONS, demonstration
 from hcnet.domain.transit_planning import SPECIFIC, specific
+from hcnet.ui.styles import set_calculate_button
 from hcnet.ui.transit_advanced import AdvancedTools, RoadTool, TechnologyTool
 from hcnet.ui.transit_forms import Form, ResultPanel, button, intervals, label, row, scroll
 from hcnet.ui.transit_layout import AdaptiveColumns, TransitPanels
@@ -119,11 +120,14 @@ class TransitEngineering(QWidget):
         self.modes = QComboBox()
         self.modes.setAccessibleName("Modalidad de transporte público")
         self.modes.addItems(self.MODES)
-        calculate = button("Calcular", self.run_current)
-        calculate.setObjectName("primaryButton")
+        self.calculate_button = button("Calcular", self.run_current)
         self.toolbar = AdaptiveColumns(
             self.modes,
-            row(calculate, button("Cargar caso demostrativo…", self._choose_demo), wrap=False),
+            row(
+                self.calculate_button,
+                button("Cargar caso demostrativo…", self._choose_demo),
+                wrap=False,
+            ),
             stretches=(2, 3),
         )
         self.status = label("", "infoBanner")
@@ -200,6 +204,7 @@ class TransitEngineering(QWidget):
 
     def _show(self):
         key = self._key()
+        set_calculate_button(self.calculate_button, key == "advanced/3")
         self.results_key = key
         record = self.records.get(key)
         self.results.show_record(record)

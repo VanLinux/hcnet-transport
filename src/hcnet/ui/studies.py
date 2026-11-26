@@ -46,6 +46,7 @@ from hcnet.simulation.results import unpack
 from hcnet.simulation.runner import SimulationCancelled, simulate
 from hcnet.ui.queue_view import QueueView
 from hcnet.ui.study_charts import StudyChart
+from hcnet.ui.styles import simulation_icon
 
 
 def button(label, action):  # noqa: ANN001, ANN201
@@ -148,7 +149,7 @@ class IntersectionStudies(QDialog):
         self.capture_note.hide()
         root.addWidget(self.capture_note)
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._simulation_tab(), "Microsimulación")
+        self.tabs.addTab(self._simulation_tab(), simulation_icon(), "Microsimulación")
         self.queues = QueueView()
         self.tabs.addTab(self.queues, "Análisis de colas")
         self.tabs.addTab(self._environment_tab(), "Evaluación ambiental y emisiones")
@@ -189,6 +190,7 @@ class IntersectionStudies(QDialog):
         layout.addLayout(form)
         buttons = QHBoxLayout()
         self.run_button = button("Ejecutar microsimulación", self._execute)
+        self.run_button.setObjectName("simulationButton")
         self.cancel_button = button("Cancelar ejecución", self._cancel)
         self.cancel_button.hide()
         buttons.addWidget(self.run_button)

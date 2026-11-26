@@ -9,6 +9,7 @@ Todos los cambios relevantes de HCNet Transport se documentan en este archivo.
 - Diseño preliminar con dimensiones fijas, cribado de geometría, comparación de intervenciones y conversión desde intersecciones HCNet.
 - Experimentos vehiculares SUMO por semillas y demanda común, colas reproducibles y emisiones. Exportación de insumos, resultados, SVG y reportes LaTeX.
 - Nueve ejercicios explícitos y persistencia en esquema 8 con carga de proyectos anteriores.
+- Tipografía Computer Modern en la interfaz, controles SUMO en violeta y menús para elegir el tema, consultar el manual y abrir Overleaf.
 
 ## 3.5.0
 

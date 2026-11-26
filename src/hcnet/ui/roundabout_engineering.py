@@ -53,6 +53,7 @@ from hcnet.ui.roundabout_capture import (
     movement_rows,
 )
 from hcnet.ui.roundabout_studies import CalibrationPane, RoundReplay, SimulationPane
+from hcnet.ui.styles import set_calculate_button, simulation_icon
 from hcnet.ui.transit_forms import Form, ResultPanel, button, label, numeric, row, scroll
 from hcnet.ui.transit_layout import AdaptiveColumns, TransitPages, TransitPanels
 
@@ -164,12 +165,12 @@ class RoundaboutEngineering(QWidget):
         self.mode.addItems(MODES)
         self.mode.setAccessibleName("Modalidad de rotonda")
         self.advanced = QCheckBox("Modo avanzado")
-        run = button("Calcular", self.run_current)
-        run.setObjectName("primaryButton")
+        self.calculate_button = button("Calcular", self.run_current)
+        self.calculate_button.setObjectName("primaryButton")
         layout.addWidget(
             AdaptiveColumns(
                 self.mode,
-                row(run, button("Caso demostrativo…", self._demo), wrap=False),
+                row(self.calculate_button, button("Caso demostrativo…", self._demo), wrap=False),
                 self.advanced,
                 stretches=(3, 2, 1),
             )
@@ -282,7 +283,7 @@ class RoundaboutEngineering(QWidget):
         self.simulation = SimulationPane()
         self.simulation.changed.connect(self._sim_changed)
         self.simulation.complete.connect(self._simulation_complete)
-        self.sim_tab = self.tabs.addTab(scroll(self.simulation), "SUMO")
+        self.sim_tab = self.tabs.addTab(scroll(self.simulation), simulation_icon(), "SUMO")
         results = QWidget()
         rb = QVBoxLayout(results)
         rb.setContentsMargins(0, 0, 0, 0)
@@ -300,7 +301,9 @@ class RoundaboutEngineering(QWidget):
         self.result_canvas = RoundCanvas()
         self.present.addTab(scroll(self.result_canvas), "Esquema y cola P95")
         self.replay = RoundReplay()
-        self.replay_tab = self.present.addTab(scroll(self.replay), "Colas de SUMO")
+        self.replay_tab = self.present.addTab(
+            scroll(self.replay), simulation_icon(), "Colas de SUMO",
+        )
         self.panels = TransitPanels(capture, results)
         pages = TransitPages()
         pages.addWidget(self.panels)
@@ -315,6 +318,7 @@ class RoundaboutEngineering(QWidget):
         self.tabs.setTabVisible(self.cal_tab, advanced)
         self.tabs.setTabVisible(self.sim_tab, advanced)
         self.present.setTabVisible(self.replay_tab, advanced)
+        self._update_calculate_button()
         self.geometry.set_advanced(advanced)
         self.scenario.visible(("weights",), advanced)
         manual = self.mode.currentIndex() == self.CONVERT and not self.original
@@ -344,6 +348,7 @@ class RoundaboutEngineering(QWidget):
             self.changed.emit()
 
     def _tab_changed(self, *_):
+        self._update_calculate_button()
         if self._loading:
             return
         key = (
@@ -353,6 +358,12 @@ class RoundaboutEngineering(QWidget):
         )
         if key and self.report_selector.findData(key) >= 0:
             self.report_selector.setCurrentIndex(self.report_selector.findData(key))
+
+    def _update_calculate_button(self):
+        set_calculate_button(
+            self.calculate_button,
+            self.advanced.isChecked() and self.tabs.currentIndex() == self.sim_tab,
+        )
 
     def _parameters(self):
         if self._loading:

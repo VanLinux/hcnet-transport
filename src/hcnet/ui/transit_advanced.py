@@ -15,6 +15,7 @@ from hcnet.domain.transit_planning import MODELS, economics, fit, optimize, reco
 from hcnet.simulation.options import locate_sumo
 from hcnet.simulation.runner import SimulationCancelled
 from hcnet.simulation.transit import simulate_corridor
+from hcnet.ui.styles import simulation_icon
 from hcnet.ui.transit_forms import (
     Form,
     button,
@@ -657,7 +658,7 @@ class AdvancedTools(QWidget):
         self.tabs.addTab(scroll(search), "Optimización")
         self.sumo = SumoTool(line)
         self.sumo.changed.connect(self.changed)
-        self.tabs.addTab(scroll(self.sumo), "Microsimulación SUMO")
+        self.tabs.addTab(scroll(self.sumo), simulation_icon(), "Microsimulación SUMO")
 
     def _baseline(self):
         self.baseline = self.line.state()

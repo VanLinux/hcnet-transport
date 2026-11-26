@@ -41,14 +41,14 @@ def calculation_trace_html(
     <html>
     <head>
       <style>
-        body {{ color: #202124; font-family: sans-serif; font-size: 10pt; }}
+        body {{ color: #202124; font-size: 10pt; }}
         h2 {{ color: #202124; margin-bottom: 2px; }}
         h3 {{ color: #3f444b; margin-top: 18px; }}
         table {{ border-collapse: collapse; width: 100%; }}
         th, td {{ border-bottom: 1px solid #dadce0; padding: 5px; text-align: left; }}
         th {{ background: #eceef0; color: #30343b; }}
         .equation {{ background: #f5f5f5; border-left: 4px solid #5f6368;
-                     font-family: monospace; margin: 6px 0; padding: 8px; }}
+                     font-family: 'CMU Typewriter Text'; margin: 6px 0; padding: 8px; }}
         .result {{ color: #176b45; font-weight: bold; }}
         .warning {{ background: #f1f3f4; border-left: 4px solid #7a7f85; padding: 8px; }}
         .muted {{ color: #5f6368; }}

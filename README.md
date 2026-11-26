@@ -68,7 +68,10 @@ operativa e infraestructura utilizada por modelos integrados como TRANUS. El mó
 evalúa una línea por vez.
 
 La barra superior cambia entre los módulos. Los divisores ajustables redistribuyen
-el espacio entre captura, esquema, resumen y resultados. El menú **Ver** cambia el tema.
+el espacio entre captura, esquema, resumen y resultados. En **Vista** puedes elegir
+**Modo claro** o **Modo oscuro**. Los controles en violeta identifican la microsimulación.
+**Ayuda** incluye **Acerca de**, **Manual** y **Link Overleaf** para abrir Overleaf
+y compilar el reporte `.tex` exportado.
 `↔` indica pestañas vinculadas y `◇` indica módulos independientes con reporte propio.
 
 ### Ingeniería de rotondas en 3.6.0

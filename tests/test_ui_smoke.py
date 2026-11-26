@@ -5,8 +5,8 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QPalette, QWheelEvent
+from PySide6.QtCore import QPoint, QPointF, QSettings, Qt
+from PySide6.QtGui import QDesktopServices, QFontInfo, QPalette, QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QWidget
 
@@ -270,7 +270,9 @@ def test_wheel_scrolls_form_and_leaves_focused_controls_unchanged(app: QApplicat
     window.close()
 
 
-def test_side_panel_layout_theme_and_context(app: QApplication) -> None:
+def test_side_panel_layout_theme_and_context(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     window = MainWindow()
     window.resize(1240, 780)
     window.show()
@@ -290,12 +292,40 @@ def test_side_panel_layout_theme_and_context(app: QApplication) -> None:
     assert "recalcular" in window.summary_status.text()
     assert not window.summary.text()
 
+    menus = {action.text(): action.menu().actions() for action in window.menuBar().actions()}
+    assert [action.text() for action in menus["Vista"]] == ["Modo claro", "Modo oscuro"]
+    about, manual, overleaf = menus["Ayuda"]
+    assert [action.text() for action in (about, manual, overleaf)] == [
+        "Acerca de", "Manual", "Link Overleaf",
+    ]
+    urls = []
+    monkeypatch.setattr(QDesktopServices, "openUrl", lambda url: urls.append(url.toString()))
+    manual.trigger()
+    overleaf.trigger()
+    assert urls == [
+        "https://vanlinux.github.io/movilidad-urbana/software/manuales/"
+        "HCNet_Transport_Manual_Usuario.pdf",
+        "https://www.overleaf.com/project",
+    ]
+
     result_page = window.results_tab.widget()
-    window._set_theme(True)
+    settings = QSettings("VanLinux", "HCNet Transport")
+    window.dark_action.trigger()
+    assert window.dark_action.isChecked() and not window.light_action.isChecked()
+    assert settings.value("dark", type=bool)
     assert result_page.palette().color(QPalette.ColorRole.Window).lightness() < 80
-    window._set_theme(False)
+    window.light_action.trigger()
+    assert window.light_action.isChecked() and not window.dark_action.isChecked()
+    assert not settings.value("dark", type=bool)
     assert result_page.palette().color(QPalette.ColorRole.Window).lightness() > 225
     assert window.result_timestamp.palette().color(QPalette.ColorRole.WindowText).lightness() < 120
+    assert QFontInfo(window.result_timestamp.font()).family() == "CMU Serif"
+    assert window.scope_browser.document().defaultFont().family() == "CMU Serif"
+
+    window._open_studies()
+    assert window.study_dialog.run_button.objectName() == "simulationButton"
+    assert not window.study_dialog.tabs.tabIcon(0).isNull()
+    window.study_dialog.close()
 
     window.dirty = False
     window.close()
@@ -311,6 +341,15 @@ def test_transport_engineering_modes_demos_and_reopen(app, tmp_path):
     window.show()
     module = window.transit_tab.engineering
     assert module.line.line.value("length_km") == ""
+    module.modes.setCurrentIndex(1)
+    module.integral.setCurrentIndex(1)
+    sumo_tab = module.advanced.tabs.count() - 1
+    module.advanced.tabs.setCurrentIndex(sumo_tab)
+    assert not module.advanced.tabs.tabIcon(sumo_tab).isNull()
+    assert module.calculate_button.objectName() == "simulationButton"
+    assert module.calculate_button.text() == "Ejecutar microsimulación"
+    module.modes.setCurrentIndex(0)
+    assert module.calculate_button.objectName() == "primaryButton"
     assert not module.run_current()
     form = module.specific.forms["Frecuencia"]
     form.set_values({"h": 4})
@@ -449,6 +488,12 @@ def test_roundabout_constructor_modes_and_persistence(app, tmp_path):
     app.processEvents()
     assert module.demand.values()==[]
     assert not module.tabs.isTabVisible(module.sim_tab)
+    module.advanced.setChecked(True)
+    module.tabs.setCurrentIndex(module.sim_tab)
+    assert not module.tabs.tabIcon(module.sim_tab).isNull()
+    assert module.calculate_button.objectName() == "simulationButton"
+    module.advanced.setChecked(False)
+    assert module.calculate_button.objectName() == "primaryButton"
 
     module.demand.matrix.setItem(0,1,QTableWidgetItem("160"))
     assert module.demand.parsed()[0].volume==160

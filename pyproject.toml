@@ -61,7 +61,7 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-hcnet = ["resources/*.svg", "resources/*.json"]
+hcnet = ["resources/*.svg", "resources/*.json", "resources/fonts/*.otf", "resources/fonts/*.txt"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
